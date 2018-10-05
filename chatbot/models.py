@@ -82,7 +82,7 @@ class Message(models.Model):
     receiver = models.ForeignKey('chatbot.User', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
     text = models.TextField(blank=True)
     music = models.ForeignKey('chatbot.Music', on_delete=models.CASCADE, blank=True, null=True)
-    chips = models.CharField(validators=[int_list_validator], max_length=10)
+    chips = models.CharField(validators=[int_list_validator], max_length=20)
 
     class Meat:
         ordering = ('created',)
