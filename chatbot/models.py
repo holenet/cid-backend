@@ -43,7 +43,7 @@ class Music(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     title = models.CharField(max_length=100)
     album = models.ForeignKey('chatbot.Album', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
-    artist = models.ForeignKey('chatbot.Artist', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
+    artists = models.ManyToManyField(Artist)
     genre = models.CharField(max_length=100, blank=True, default='')
     length = models.PositiveSmallIntegerField(blank=True, default=0)
 
