@@ -18,7 +18,7 @@ class Artist(models.Model):
 
     def __str__(self):
         return self.name
-    
+
     class Meta:
         ordering = ('created',)
 
@@ -68,7 +68,7 @@ class Music(models.Model):
 
 class Evaluation(models.Model):
     created = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey('chatbot.User', related_name='evaluations', on_delete=models.CASCADE, blank=True, null=True)
+    user = models.ForeignKey('chatbot.User', related_name='evaluations', on_delete=models.CASCADE)
     music = models.ForeignKey('chatbot.Music', related_name='evaluations', on_delete=models.CASCADE)
 
     class Meta:
