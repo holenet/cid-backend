@@ -1,4 +1,6 @@
 venv
+chatbot/migrations
+db.sqlite3
 *.swp
 *.pyc
 .idea
