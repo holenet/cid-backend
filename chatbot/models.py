@@ -16,6 +16,9 @@ class Artist(models.Model):
     debut = models.DateField(blank=True, null=True)
     agent = models.CharField(max_length=100, blank=True, default='')
 
+    def __str__(self):
+        return self.name
+    
     class Meta:
         ordering = ('created',)
 
@@ -24,9 +27,15 @@ class SoloArtist(Artist):
     gender = models.BooleanField(blank=True, null=True) # True: male, False: female
     birthday = models.DateField(blank=True, null=True)
 
+    def __str__(self):
+        return self.name
+
 
 class GroupArtist(Artist):
     members = models.ManyToManyField(SoloArtist)
+
+    def __str__(self):
+        return self.name
 
 
 class Album(models.Model):
@@ -34,6 +43,9 @@ class Album(models.Model):
     title = models.CharField(max_length=100, blank=True, default='')
     artists = models.ManyToManyField(Artist)
     release = models.DateField(blank=True, null=True)
+
+    def __str__(self):
+        return self.title
 
     class Meta:
         ordering = ('created',)
@@ -46,6 +58,9 @@ class Music(models.Model):
     artists = models.ManyToManyField(Artist)
     genre = models.CharField(max_length=100, blank=True, default='')
     length = models.PositiveSmallIntegerField(blank=True, default=0)
+
+    def __str__(self):
+        return self.title
 
     class Meta:
         ordering = ('created',)
