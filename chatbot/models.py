@@ -21,12 +21,12 @@ class Artist(models.Model):
 
 
 class SoloArtist(Artist):
+    gender = models.BooleanField(blank=True, null=True) # True: male, False: female
     birthday = models.DateField(blank=True, null=True)
-    member_of = models.ForeignKey('chatbot.GroupArtist', related_name='members', on_delete=models.SET_NULL, blank=True, null=True)
 
 
 class GroupArtist(Artist):
-    pass
+    members = models.ManyToManyField(SoloArtist)
 
 
 class Album(models.Model):
