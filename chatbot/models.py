@@ -6,8 +6,8 @@ class User(auth_models.User):
     objects = auth_models.UserManager()
 
     created = models.DateTimeField(auto_now_add=True)
-    gender = models.BooleanField(blank=True, default=0) # 0: male, 1: female
-    age = models.IntegerField(blank=True, default=0)
+    gender = models.BooleanField(blank=True, null=True) # True: male, False: female
+    age = models.IntegerField(blank=True, null=True)
 
 
 class Artist(models.Model):
@@ -22,7 +22,7 @@ class Artist(models.Model):
 
 class SoloArtist(Artist):
     birthday = models.DateField(blank=True, null=True)
-    member_of = models.ForeignKey('chatbot.GroupArtist', related_name='members', on_delete=models.DO_NOTHING, blank=True, null=True)
+    member_of = models.ForeignKey('chatbot.GroupArtist', related_name='members', on_delete=models.SET_NULL, blank=True, null=True)
 
 
 class GroupArtist(Artist):
@@ -32,7 +32,7 @@ class GroupArtist(Artist):
 class Album(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     title = models.CharField(max_length=100, blank=True, default='')
-    artist = models.ForeignKey('chatbot.Artist', related_name='albums', on_delete=models.CASCADE, blank=True, null=True)
+    artists = models.ManyToManyField(Artist)
     release = models.DateField(blank=True, null=True)
 
     class Meta:
@@ -41,10 +41,11 @@ class Album(models.Model):
 
 class Music(models.Model):
     created = models.DateTimeField(auto_now_add=True)
-    title = models.CharField(max_length=100, blank=True, default='')
+    title = models.CharField(max_length=100)
     album = models.ForeignKey('chatbot.Album', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
+    artist = models.ForeignKey('chatbot.Artist', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
     genre = models.CharField(max_length=100, blank=True, default='')
-    length = models.IntegerField(blank=True, default=0)
+    length = models.PositiveSmallIntegerField(blank=True, default=0)
 
     class Meta:
         ordering = ('created',)
@@ -53,7 +54,7 @@ class Music(models.Model):
 class Evaluation(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     user = models.ForeignKey('chatbot.User', related_name='evaluations', on_delete=models.CASCADE, blank=True, null=True)
-    music = models.ForeignKey('chatbot.Music', related_name='evaluations', on_delete=models.CASCADE, blank=True, null=True)
+    music = models.ForeignKey('chatbot.Music', related_name='evaluations', on_delete=models.CASCADE)
 
     class Meta:
         ordering = ('created',)
