@@ -4,7 +4,6 @@ from chatbot import views
 
 
 urlpatterns = [
-
 ]
 
 urlpatterns += format_suffix_patterns(urlpatterns)
