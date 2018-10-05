@@ -77,10 +77,10 @@ class Evaluation(models.Model):
 
 class Message(models.Model):
     created = models.DateTimeField(auto_now_add=True)
-    sender = models.ForeignKey('chatbot.User', related_name='sent', on_delete=models.CASCADE, blank=True, null=True)
-    receiver = models.ForeignKey('chatbot.User', related_name='received', on_delete=models.CASCADE, blank=True, null=True)
-    text = models.CharField(max_length=500, blank=True, default='')
-    music = models.ForeignKey('chatbot.Music', related_name='messages', on_delete=models.CASCADE, blank=True, null=True)
+    sender = models.ForeignKey('chatbot.User', related_name='sent_messages', on_delete=models.CASCADE, blank=True, null=True)
+    receiver = models.ForeignKey('chatbot.User', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
+    text = models.TextField(blank=True)
+    music = models.ForeignKey('chatbot.Music', on_delete=models.CASCADE, blank=True, null=True)
     chips = models.CharField(max_length=100, blank=True, default='')
 
     class Meat:
