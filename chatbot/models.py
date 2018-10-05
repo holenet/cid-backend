@@ -7,7 +7,7 @@ class User(auth_models.User):
 
     created = models.DateTimeField(auto_now_add=True)
     gender = models.BooleanField(blank=True, null=True) # True: male, False: female
-    age = models.IntegerField(blank=True, null=True)
+    age = models.PositiveSmallIntegerField(blank=True, null=True)
 
 
 class Artist(models.Model):
