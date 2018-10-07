@@ -3,11 +3,11 @@ from django.db import models
 from django.contrib.auth import models as auth_models
 
 
-class User(auth_models.User):
+class Muser(auth_models.User):
     objects = auth_models.UserManager()
 
     created = models.DateTimeField(auto_now_add=True)
-    gender = models.BooleanField(blank=True, null=True) # True: male, False: female
+    gender = models.PositiveSmallIntegerField(blank=True, default=0) # 1: male, 2: female
     age = models.PositiveSmallIntegerField(blank=True, null=True)
 
 
@@ -69,8 +69,12 @@ class Music(models.Model):
 
 class Evaluation(models.Model):
     created = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey('chatbot.User', related_name='evaluations', on_delete=models.CASCADE)
+    user = models.ForeignKey('chatbot.Muser', related_name='evaluations', on_delete=models.CASCADE)
     music = models.ForeignKey('chatbot.Music', related_name='evaluations', on_delete=models.CASCADE)
+    rating = models.PositiveSmallIntegerField(blank=False)
+
+    def __str__(self):
+        return "{0}-{1}".format(self.music.title, self.user.username)
 
     class Meta:
         ordering = ('created',)
@@ -78,8 +82,8 @@ class Evaluation(models.Model):
 
 class Message(models.Model):
     created = models.DateTimeField(auto_now_add=True)
-    sender = models.ForeignKey('chatbot.User', related_name='sent_messages', on_delete=models.CASCADE, blank=True, null=True)
-    receiver = models.ForeignKey('chatbot.User', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
+    sender = models.ForeignKey('chatbot.Muser', related_name='sent_messages', on_delete=models.CASCADE, blank=True, null=True)
+    receiver = models.ForeignKey('chatbot.Muser', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
     text = models.TextField(blank=True)
     music = models.ForeignKey('chatbot.Music', on_delete=models.CASCADE, blank=True, null=True)
     chips = models.CharField(validators=[int_list_validator], max_length=20)
