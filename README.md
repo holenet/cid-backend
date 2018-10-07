@@ -5,5 +5,5 @@
 ```console
 $ virtualenv -p python3 venv
 $ source venv/bin/activate
-$ pip3 install django djangorestframework django-rest-auth
+$ pip3 install django djangorestframework
 ```
