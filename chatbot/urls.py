@@ -6,6 +6,7 @@ from chatbot import views
 urlpatterns = [
     path('auth/signin/', views.signin),
     path('auth/signout/', views.signout),
+    path('users/', views.MuserList.as_view()),
     path('users/<int:pk>/', views.MuserDetail.as_view()),
 ]
 

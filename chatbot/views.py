@@ -48,6 +48,12 @@ def signout(request):
         return Response({'error': 'Authorization invalid'}, status=HTTP_404_NOT_FOUND)
 
 
+class MuserList(generics.ListAPIView):
+    queryset = Muser.objects.all()
+    serializer_class = MuserSerializer
+    permission_classes = (AllowAny,)
+
+
 class MuserDetail(generics.RetrieveUpdateDestroyAPIView):
     queryset = Muser.objects.all()
     serializer_class = MuserSerializer
