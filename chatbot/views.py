@@ -14,7 +14,7 @@ from chatbot.models import Muser
 from chatbot.serializers import MuserSerializer
 from chatbot.permissions import IsExactMuser
 
-@csrf_exempt
+
 @api_view(['POST'])
 @permission_classes((AllowAny,))
 def signup(request):
@@ -30,7 +30,6 @@ def signup(request):
         return Response({'error': 'username already taken'}, status=HTTP_400_BAD_REQUEST)
 
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes((AllowAny,))
 def signin(request):
@@ -47,7 +46,7 @@ def signin(request):
     return Response({'token': token.key}, status=HTTP_200_OK)
 
 
-@csrf_exempt
+
 @api_view(['POST'])
 @permission_classes((AllowAny,))
 def signout(request):
