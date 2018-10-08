@@ -75,6 +75,12 @@ def withdraw(request):
     if not user:
         return Response({'error': 'credentials invalid'}, status=HTTP_404_NOT_FOUND)
 
+    try:
+        token = Token.objects.get(user=user)
+        token.delete()
+    except exceptions.ObjectDoesNotExist:
+        pass
+
     user.delete()
     return Response({'detail': 'withdraw successful'}, status=HTTP_200_OK)
 
