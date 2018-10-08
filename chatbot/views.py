@@ -63,6 +63,22 @@ def signout(request):
         return Response({'error': 'Authorization invalid'}, status=HTTP_404_NOT_FOUND)
 
 
+@api_view(['POST'])
+@permission_classes((AllowAny,))
+def withdraw(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    if username is None or password is None:
+        return Response({'error': 'username/password not given'}, status=HTTP_400_BAD_REQUEST)
+
+    user = authenticate(username=username, password=password)
+    if not user:
+        return Response({'error': 'credentials invalid'}, status=HTTP_404_NOT_FOUND)
+
+    user.delete()
+    return Response({'detail': 'withdraw successful'}, status=HTTP_200_OK)
+
+
 class MuserList(generics.ListAPIView):
     queryset = Muser.objects.all()
     serializer_class = MuserSerializer
