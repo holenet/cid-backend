@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate
 from django.core import exceptions
+from django.db.utils import IntegrityError
 from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework.authtoken.models import Token
@@ -13,9 +14,24 @@ from chatbot.models import Muser
 from chatbot.serializers import MuserSerializer
 from chatbot.permissions import IsExactMuser
 
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes((AllowAny,))
+def signup(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    if username is None or password is None:
+        return Response({'error': 'username/password not given'}, status=HTTP_400_BAD_REQUEST)
+
+    try:
+        Muser.objects.create_user(username=username, password=password)
+        return Response({'detail': 'sign-up successful'}, status=HTTP_200_OK)
+    except IntegrityError:
+        return Response({'error': 'username already taken'}, status=HTTP_400_BAD_REQUEST)
+
 
 @csrf_exempt
-@api_view(["POST"])
+@api_view(['POST'])
 @permission_classes((AllowAny,))
 def signin(request):
     username = request.data.get('username')
@@ -32,7 +48,7 @@ def signin(request):
 
 
 @csrf_exempt
-@api_view(["POST"])
+@api_view(['POST'])
 @permission_classes((AllowAny,))
 def signout(request):
     auth = request.environ.get('HTTP_AUTHORIZATION')
