@@ -63,7 +63,7 @@ class Evaluation(models.Model):
     rating = models.PositiveSmallIntegerField(blank=False)
 
     def __str__(self):
-        return "{0}-{1}".format(self.music.title, self.user.username)
+        return f'{self.music.title}-{self.user.username}'
 
 
 class Message(models.Model):
@@ -71,10 +71,10 @@ class Message(models.Model):
     receiver = models.ForeignKey('chatbot.Muser', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
     text = models.TextField(blank=True)
     music = models.ForeignKey('chatbot.Music', on_delete=models.CASCADE, blank=True, null=True)
-    chips = models.CharField(validators=[int_list_validator], max_length=20)
+    chips = models.CharField(validators=[int_list_validator], max_length=20, blank=True, null=True)
 
     def __str__(self):
         if not self.sender:
-            return '{0}->{1}'.format('mu-bot', self.receiver.username)
+            return f'mu-bot -> {self.receiver.username}'
         else:
-            return '{0}->{1}'.format(self.sender.username, 'mu-bot')
+            return f'{self.sender.username} -> mu-bot'
