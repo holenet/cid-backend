@@ -1,7 +1,6 @@
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
 from django.db.utils import IntegrityError
-from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
@@ -24,10 +23,14 @@ def signup(request):
         return Response({'error': 'username/password not given'}, status=HTTP_400_BAD_REQUEST)
 
     try:
-        Muser.objects.create_user(username=username, password=password)
+        user = Muser.objects.create_user(username=username, password=password)
+        password_validation.validate_password(password, user=user)
         return Response({'detail': 'sign-up successful'}, status=HTTP_200_OK)
     except IntegrityError:
         return Response({'error': 'username already taken'}, status=HTTP_400_BAD_REQUEST)
+    except exceptions.ValidationError as e:
+        user.delete()
+        return Response({'error': e}, status=HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
@@ -44,7 +47,6 @@ def signin(request):
 
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key}, status=HTTP_200_OK)
-
 
 
 @api_view(['POST'])
