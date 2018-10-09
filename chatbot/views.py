@@ -90,7 +90,6 @@ def withdraw(request):
 class MuserDetail(generics.RetrieveUpdateAPIView):
     queryset = Muser.objects.all()
     serializer_class = MuserSerializer
-    permission_classes = (IsExactMuser,)
 
     def get_object(self):
         return Muser.objects.get_by_natural_key(self.request.user.username)
