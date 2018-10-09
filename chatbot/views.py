@@ -95,12 +95,6 @@ class MuserDetail(generics.RetrieveUpdateAPIView):
         return Muser.objects.get_by_natural_key(self.request.user.username)
 
     def update(self, request, *args, **kwargs):
-        gender = request.data.get('gender')
-        if gender is not None:
-            if 3 < int(gender):
-                # 1: male, 2: female, 0: others
-                request.data['gender'] = 0
-
         old_password = request.data.get('old_password')
         new_password = request.data.get('new_password')
         if old_password is not None and new_password is not None:
