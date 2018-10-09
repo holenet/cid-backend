@@ -20,7 +20,3 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('chatbot/', include('chatbot.urls')),
 ]
-
-urlpatterns += [
-    path('api-auth', include('rest_framework.urls'))
-]

@@ -87,13 +87,28 @@ def withdraw(request):
     return Response({'detail': 'withdraw successful'}, status=HTTP_200_OK)
 
 
-class MuserList(generics.ListAPIView):
+class MuserDetail(generics.RetrieveUpdateAPIView):
     queryset = Muser.objects.all()
     serializer_class = MuserSerializer
-    permission_classes = (AllowAny,)
 
+    def get_object(self):
+        return Muser.objects.get_by_natural_key(self.request.user.username)
 
-class MuserDetail(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Muser.objects.all()
-    serializer_class = MuserSerializer
-    permission_classes = (IsExactMuser,)
+    def update(self, request, *args, **kwargs):
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+        if old_password is not None and new_password is not None:
+            user = self.get_object()
+            if user.check_password(old_password) is True:
+                try:
+                    password_validation.validate_password(new_password, user=user)
+                    user.set_password(new_password)
+                    user.save()
+                    Token.objects.get(user=user).delete()
+                except exceptions.ValidationError as e:
+                    return Response({'error': e}, status=HTTP_400_BAD_REQUEST)
+            else:
+                return Response({'error': 'credentials invalid'}, status=HTTP_400_BAD_REQUEST)
+
+        return super(MuserDetail, self).update(request, *args, **kwargs)
+

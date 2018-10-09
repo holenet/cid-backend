@@ -7,7 +7,7 @@ class Muser(auth_models.User):
     objects = auth_models.UserManager()
 
     gender = models.PositiveSmallIntegerField(blank=True, default=0) # 1: male, 2: female
-    age = models.PositiveSmallIntegerField(blank=True, null=True)
+    birthdate = models.DateField(blank=True, null=True)
 
     def __str__(self):
         return self.username
