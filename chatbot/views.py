@@ -2,16 +2,16 @@ from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
 from django.db.utils import IntegrityError
 
+from rest_framework import generics
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework import generics
 from rest_framework.permissions import AllowAny
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_200_OK
 from rest_framework.response import Response
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_200_OK
 
 from chatbot.models import Muser
-from chatbot.serializers import MuserSerializer
 from chatbot.permissions import IsExactMuser
+from chatbot.serializers import MuserSerializer
 
 
 @api_view(['POST'])
