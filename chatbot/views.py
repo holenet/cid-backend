@@ -139,10 +139,3 @@ class Chat(generics.ListCreateAPIView):
 
         Process(target=self.respond, args=(user, text, serializer, )).start()
         serializer.save(sender=user, text=text)
-
-    def create(self, request, *args, **kwargs):
-        auth = request.environ.get('HTTP_AUTHORIZATION')
-        if auth is None:
-            return Response({'detail': 'Authentication credentials were not provided.'}, status=HTTP_401_UNAUTHORIZED)
-
-        return super(Chat, self).create(request, *args, **kwargs)
