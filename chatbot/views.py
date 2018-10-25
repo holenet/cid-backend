@@ -1,4 +1,3 @@
-import os
 from multiprocessing import Process
 
 from django.contrib.auth import authenticate, password_validation
