@@ -1,3 +1,5 @@
+import os
+
 from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
 from django.db.utils import IntegrityError
@@ -7,11 +9,11 @@ from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_200_OK
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED, HTTP_404_NOT_FOUND, HTTP_200_OK
 
-from chatbot.models import Muser
+from chatbot.models import Muser, Message
 from chatbot.permissions import IsExactMuser
-from chatbot.serializers import MuserSerializer
+from chatbot.serializers import MuserSerializer, MessageSerializer
 
 
 @api_view(['POST'])
@@ -112,3 +114,37 @@ class MuserDetail(generics.RetrieveUpdateAPIView):
 
         return super(MuserDetail, self).update(request, *args, **kwargs)
 
+
+class Chat(generics.ListCreateAPIView):
+    queryset = Message.objects.all()
+    serializer_class = MessageSerializer
+
+    def get_queryset(self):
+        username = self.request.user.username
+        return Message.objects.filter(sender__username=username) | Message.objects.filter(receiver__username=username)
+
+    def perform_create(self, serializer):
+        user = Muser.objects.get_by_natural_key(self.request.user.username)
+        text = self.request.data.get('text')
+
+        response_pid = os.fork()
+        if response_pid != 0:
+            """ parent process: saves received message """
+            serializer.save(sender=user, text=text)
+        else:
+            """ child process: cooperates with chatscript """
+            from time import sleep
+            from random import sample
+
+            sleep(3) # TODO: create message
+
+            text = 'some response'
+            chips = sample(range(0, 20), 4)
+            serializer.save(receiver=user, text=text, chips=chips)
+
+    def create(self, request, *args, **kwargs):
+        auth = request.environ.get('HTTP_AUTHORIZATION')
+        if auth is None:
+            return Response({'detail': 'Authentication credentials were not provided.'}, status=HTTP_401_UNAUTHORIZED)
+
+        return super(Chat, self).create(request, *args, **kwargs)

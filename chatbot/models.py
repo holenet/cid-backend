@@ -67,6 +67,7 @@ class Evaluation(models.Model):
 
 
 class Message(models.Model):
+    created = models.DateTimeField(auto_now_add=True)
     sender = models.ForeignKey('chatbot.Muser', related_name='sent_messages', on_delete=models.CASCADE, blank=True, null=True)
     receiver = models.ForeignKey('chatbot.Muser', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
     text = models.TextField(blank=True)
