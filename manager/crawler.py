@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from django.db.models import signals
 from django.dispatch import receiver
 from manager.models import Crawler
+from chatbot.models import Artist, SoloArtist, GroupArtist, Music
 
 
 @receiver(signals.post_save, sender=Crawler)
