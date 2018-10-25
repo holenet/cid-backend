@@ -1,4 +1,5 @@
 import os
+from multiprocessing import Process
 
 from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
@@ -123,24 +124,21 @@ class Chat(generics.ListCreateAPIView):
         user = self.request.user
         return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
 
+    def respond(self, user, text, serializer):
+        from time import sleep
+        from random import sample
+
+        sleep(3) # TODO: create message
+        text = 'some response'
+        chips = sample(range(0, 20), 4)
+        serializer.save(receiver=user, text=text, chips=chips)
+
     def perform_create(self, serializer):
         user = Muser.objects.get_by_natural_key(self.request.user.username)
         text = self.request.data.get('text')
 
-        response_pid = os.fork()
-        if response_pid != 0:
-            """ parent process: saves received message """
-            serializer.save(sender=user, text=text)
-        else:
-            """ child process: cooperates with chatscript """
-            from time import sleep
-            from random import sample
-
-            sleep(3) # TODO: create message
-
-            text = 'some response'
-            chips = sample(range(0, 20), 4)
-            serializer.save(receiver=user, text=text, chips=chips)
+        Process(target=self.respond, args=(user, text, serializer, )).start()
+        serializer.save(sender=user, text=text)
 
     def create(self, request, *args, **kwargs):
         auth = request.environ.get('HTTP_AUTHORIZATION')
