@@ -9,6 +9,7 @@ urlpatterns = [
     path('auth/signout/', views.signout),
     path('auth/withdraw/', views.withdraw),
     path('my-info/', views.MuserDetail.as_view()),
+    path('chat/', views.Chat.as_view()),
 ]
 
 urlpatterns += format_suffix_patterns(urlpatterns)
