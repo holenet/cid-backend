@@ -120,8 +120,8 @@ class Chat(generics.ListCreateAPIView):
     serializer_class = MessageSerializer
 
     def get_queryset(self):
-        username = self.request.user.username
-        return Message.objects.filter(sender__username=username) | Message.objects.filter(receiver__username=username)
+        user = self.request.user
+        return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
 
     def perform_create(self, serializer):
         user = Muser.objects.get_by_natural_key(self.request.user.username)
