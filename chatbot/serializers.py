@@ -10,7 +10,7 @@ class MuserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Muser
-        fields = ('id', 'username', 'gender', 'birthdate', 'evaluations', 'token')
+        fields = ('id', 'username', 'gender', 'birthdate', 'evaluations', 'push_token')
         read_only_fields = ('username', )
 
 

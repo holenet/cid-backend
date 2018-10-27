@@ -125,7 +125,6 @@ class MuserDetail(generics.RetrieveUpdateAPIView):
 
 
 class Chat(generics.ListCreateAPIView):
-    queryset = Message.objects.all()
     serializer_class = MessageSerializer
 
     def get_queryset(self):
@@ -147,3 +146,11 @@ class Chat(generics.ListCreateAPIView):
 
         Process(target=self.respond, args=(user, text, serializer, )).start()
         serializer.save(sender=user, text=text)
+
+
+class ChatDetail(generics.RetrieveAPIView):
+    serializer_class = MessageSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)

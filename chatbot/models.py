@@ -80,11 +80,12 @@ class Message(models.Model):
     chips = models.CharField(validators=[int_list_validator], max_length=20, blank=True, null=True)
 
     def save(self, *args, **kwargs):
-        if self.sender is None and self.id is None and self.receiver.push_token is not None:
+        is_first = self.id is None
+        super(Message, self).save(*args, **kwargs)
+        if self.sender is None and is_first and self.receiver.push_token is not None:
             # push notification to user device
             push_service = pyfcm.FCMNotification(api_key=settings.SERVER_KEY)
-            push_service.notify_single_device(registration_id=self.receiver.push_token, data_message={'title': 'muBot', 'body': self.text})
-        super(Message, self).save(*args, **kwargs)
+            push_service.notify_single_device(registration_id=self.receiver.push_token, data_message={'message_id': self.id, 'text': self.text})
 
     def __str__(self):
         if not self.sender:
