@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from chatbot.models import Muser, Message
 
+
 class MuserSerializer(serializers.ModelSerializer):
     def validate_gender(self, value):
         if 3 <= value:
@@ -9,7 +10,7 @@ class MuserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Muser
-        fields = ('id', 'username', 'gender', 'birthdate', 'evaluations', )
+        fields = ('id', 'username', 'gender', 'birthdate', 'evaluations', 'token')
         read_only_fields = ('username', )
 
 
