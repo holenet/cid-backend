@@ -1,3 +1,5 @@
+from multiprocessing import Process
+
 from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
 from django.db.utils import IntegrityError
@@ -9,9 +11,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_200_OK
 
-from chatbot.models import Muser
-from chatbot.permissions import IsExactMuser
-from chatbot.serializers import MuserSerializer
+from chatbot.models import Muser, Message
+from chatbot.serializers import MuserSerializer, MessageSerializer
 
 
 @api_view(['POST'])
@@ -38,12 +39,18 @@ def signup(request):
 def signin(request):
     username = request.data.get('username')
     password = request.data.get('password')
+    push_token = request.data.get('push_token')
     if username is None or password is None:
         return Response({'error': 'username/password not given'}, status=HTTP_400_BAD_REQUEST)
+    if push_token is None:
+        return Response({'error': 'token not given'}, status=HTTP_400_BAD_REQUEST)
 
     user = authenticate(username=username, password=password)
     if not user:
         return Response({'error': 'credentials invalid'}, status=HTTP_404_NOT_FOUND)
+    muser = Muser.objects.get_by_natural_key(user.username)
+    muser.push_token = push_token
+    muser.save()
 
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key}, status=HTTP_200_OK)
@@ -59,6 +66,10 @@ def signout(request):
     key = auth.replace("Token ", "")
     try:
         token = Token.objects.get(key=key)
+        if token.user:
+            muser = Muser.objects.get_by_natural_key(token.user.username)
+            muser.push_token = None
+            muser.save()
         token.delete()
         return Response(status=HTTP_200_OK)
     except exceptions.ObjectDoesNotExist:
@@ -112,3 +123,34 @@ class MuserDetail(generics.RetrieveUpdateAPIView):
 
         return super(MuserDetail, self).update(request, *args, **kwargs)
 
+
+class Chat(generics.ListCreateAPIView):
+    serializer_class = MessageSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
+
+    def respond(self, user, text, serializer):
+        from time import sleep
+        from random import sample
+
+        sleep(3) # TODO: create message
+        text = 'some response'
+        chips = sample(range(0, 20), 4)
+        serializer.save(receiver=user, text=text, chips=chips)
+
+    def perform_create(self, serializer):
+        user = Muser.objects.get_by_natural_key(self.request.user.username)
+        text = self.request.data.get('text')
+
+        Process(target=self.respond, args=(user, text, serializer, )).start()
+        serializer.save(sender=user, text=text)
+
+
+class ChatDetail(generics.RetrieveAPIView):
+    serializer_class = MessageSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
