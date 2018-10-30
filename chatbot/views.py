@@ -9,10 +9,9 @@ from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_401_UNAUTHORIZED, HTTP_404_NOT_FOUND, HTTP_200_OK
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_200_OK
 
 from chatbot.models import Muser, Message
-from chatbot.permissions import IsExactMuser
 from chatbot.serializers import MuserSerializer, MessageSerializer
 
 
@@ -40,12 +39,18 @@ def signup(request):
 def signin(request):
     username = request.data.get('username')
     password = request.data.get('password')
+    push_token = request.data.get('push_token')
     if username is None or password is None:
         return Response({'error': 'username/password not given'}, status=HTTP_400_BAD_REQUEST)
+    if push_token is None:
+        return Response({'error': 'token not given'}, status=HTTP_400_BAD_REQUEST)
 
     user = authenticate(username=username, password=password)
     if not user:
         return Response({'error': 'credentials invalid'}, status=HTTP_404_NOT_FOUND)
+    muser = Muser.objects.get_by_natural_key(user.username)
+    muser.push_token = push_token
+    muser.save()
 
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key}, status=HTTP_200_OK)
@@ -61,6 +66,10 @@ def signout(request):
     key = auth.replace("Token ", "")
     try:
         token = Token.objects.get(key=key)
+        if token.user:
+            muser = Muser.objects.get_by_natural_key(token.user.username)
+            muser.push_token = None
+            muser.save()
         token.delete()
         return Response(status=HTTP_200_OK)
     except exceptions.ObjectDoesNotExist:
@@ -116,7 +125,6 @@ class MuserDetail(generics.RetrieveUpdateAPIView):
 
 
 class Chat(generics.ListCreateAPIView):
-    queryset = Message.objects.all()
     serializer_class = MessageSerializer
 
     def get_queryset(self):
@@ -138,3 +146,11 @@ class Chat(generics.ListCreateAPIView):
 
         Process(target=self.respond, args=(user, text, serializer, )).start()
         serializer.save(sender=user, text=text)
+
+
+class ChatDetail(generics.RetrieveAPIView):
+    serializer_class = MessageSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
