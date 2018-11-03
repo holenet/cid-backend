@@ -1,3 +1,4 @@
+import socket
 from multiprocessing import Process
 
 from django.contrib.auth import authenticate, password_validation
@@ -13,6 +14,16 @@ from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP
 
 from chatbot.models import Muser, Message
 from chatbot.serializers import MuserSerializer, MessageSerializer
+
+
+def chatscript(username, text):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect(('localhost', 1024))
+    content = f'{username}\0\0{text}\0'
+    sock.send(bytes(content, encoding='utf-8'))
+    response = sock.recv(1024).decode('utf-8')
+    sock.close()
+    return response
 
 
 @api_view(['POST'])
@@ -34,6 +45,13 @@ def signup(request):
         return Response({'error': e}, status=HTTP_400_BAD_REQUEST)
 
 
+def greet(user):
+    text = chatscript(user.username, '')
+    serializer = MessageSerializer(data=dict(receiver=user, text=text))
+    if serializer.is_valid():
+        serializer.save()
+
+
 @api_view(['POST'])
 @permission_classes((AllowAny,))
 def signin(request):
@@ -51,6 +69,8 @@ def signin(request):
     muser = Muser.objects.get_by_natural_key(user.username)
     muser.push_token = push_token
     muser.save()
+
+    Process(target=greet, args=(user,)).start()
 
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key}, status=HTTP_200_OK)
@@ -132,11 +152,9 @@ class Chat(generics.ListCreateAPIView):
         return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
 
     def respond(self, user, text, serializer):
-        from time import sleep
         from random import sample
 
-        sleep(3) # TODO: create message
-        text = 'some response'
+        text = chatscript(user.username, text)
         chips = sample(range(0, 20), 4)
         serializer.save(receiver=user, text=text, chips=chips)
 
