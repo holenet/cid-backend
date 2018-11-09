@@ -19,7 +19,7 @@ class Muser(auth_models.User):
 
 
 class Artist(models.Model):
-    name = models.CharField(max_length=100, blank=True, default='')
+    name = models.CharField(max_length=100, blank=True, default='', unique=True)
     debut = models.DateField(blank=True, null=True)
     agent = models.CharField(max_length=100, blank=True, default='')
 
