@@ -1,6 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-from threading import Thread
 
 from django.db.models import signals
 from django.dispatch import receiver
@@ -20,7 +19,6 @@ def crawl_genre(genre, url, headers):
         data = row.findChildren(name='td')
         wrap = data[4].findChildren(name='a')
         artist_id = wrap[1]['href'].split('.')[2].split("'")[1]
-
         artist_ids.add(artist_id)
 
     for artist_id in artist_ids:
@@ -29,8 +27,6 @@ def crawl_genre(genre, url, headers):
         soup = BeautifulSoup(html, 'html.parser')
 
         artist_name = soup.find(name='p', attrs={'class': 'title_atist'}).text[5:]
-        print(f'<{artist_name}>')
-
         artist, _ = Artist.objects.get_or_create(name=artist_name)
 
         table = soup.findChild(name='tbody')
@@ -44,7 +40,7 @@ def crawl_genre(genre, url, headers):
                 album, _ = Album.objects.get_or_create(title=album_title)
                 album.artists.add(artist)
 
-                music, _ = Music.objects.get_or_create(title=music_title, album=album)
+                music, _ = Music.objects.get_or_create(title=music_title, album=album, genre=genre)
                 music.artists.add(artist)
 
 
@@ -52,11 +48,11 @@ def crawl_genre(genre, url, headers):
 def crawl(sender, instance, **kwargs):
     urls = {
         'pop': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN0900&steadyYn=Y',
-        #'rock/metal': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1000&steadyYn=Y',
-        #'electronica': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1100&steadyYn=Y',
-        #'rap/hip-hop': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1200&steadyYn=Y',
-        #'R&B/soul': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1300&steadyYn=Y',
-        #'folk/blues/country': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1400&steadyYn=Y',
+        'rock/metal': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1000&steadyYn=Y',
+        'electronica': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1100&steadyYn=Y',
+        'rap/hip-hop': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1200&steadyYn=Y',
+        'R&B/soul': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1300&steadyYn=Y',
+        'folk/blues/country': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1400&steadyYn=Y',
     }
 
     headers = {
@@ -64,4 +60,5 @@ def crawl(sender, instance, **kwargs):
     }
 
     for genre, url in urls.items():
-        Thread(target=crawl_genre, args=(genre, url, headers, )).start()
+        crawl_genre(genre, url, headers)
+        # Thread(target=crawl_genre, args=(genre, url, headers, )).start()
