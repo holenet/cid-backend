@@ -1,13 +1,19 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 
+from django.db import connection
 from django.db.models import signals
 from django.dispatch import receiver
-from manager.models import Crawler
+from manager.models import Crawler, CrawlerStatus
 from chatbot.models import Artist, Music, Album
 
 
 def crawl_genre(genre, url, headers):
+    connection.close()
+
+    print(f'==================== {genre} ====================')
+
     html = requests.get(url=url, headers=headers).text
     soup = BeautifulSoup(html, 'html.parser')
     table = soup.findChild(name='tbody')
@@ -29,6 +35,8 @@ def crawl_genre(genre, url, headers):
         artist_name = soup.find(name='p', attrs={'class': 'title_atist'}).text[5:]
         artist, _ = Artist.objects.get_or_create(name=artist_name)
 
+        print(f'> {artist_name}')
+
         table = soup.findChild(name='tbody')
         rows = table.findChildren(name='tr')
         for row in rows:
@@ -46,6 +54,13 @@ def crawl_genre(genre, url, headers):
 
 @receiver(signals.post_save, sender=Crawler)
 def crawl(sender, instance, **kwargs):
+    connection.connect()
+
+    status = CrawlerStatus.objects.create()
+
+    if os.fork() != 0:
+        return
+
     urls = {
         'pop': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN0900&steadyYn=Y',
         'rock/metal': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1000&steadyYn=Y',
@@ -61,4 +76,9 @@ def crawl(sender, instance, **kwargs):
 
     for genre, url in urls.items():
         crawl_genre(genre, url, headers)
-        # Thread(target=crawl_genre, args=(genre, url, headers, )).start()
+        status.progress += 16
+        status.save()
+
+    status.progress = 100
+    status.save()
+    print('Crawling finished')
