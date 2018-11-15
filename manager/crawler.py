@@ -6,8 +6,6 @@ from chatbot.models import Artist, Music, Album
 
 
 def crawl_genre(genre, url, headers):
-    print(f'==================== {genre} ====================')
-
     html = requests.get(url=url, headers=headers).text
     soup = BeautifulSoup(html, 'html.parser')
     table = soup.findChild(name='tbody')
@@ -30,8 +28,6 @@ def crawl_genre(genre, url, headers):
 
         artist_name = soup.find(name='p', attrs={'class': 'title_atist'}).text[5:]
         artist, _ = Artist.objects.get_or_create(name=artist_name)
-
-        print(f'> {artist_name}')
 
         table = soup.findChild(name='tbody')
         rows = table.findChildren(name='tr')
@@ -82,7 +78,6 @@ def crawl(crawler):
                 current = time.time()
                 if progress != 0:
                     crawler.remain = (current - last) / progress * (1 - progress)
-                print(f'...{crawler.progress} %')
                 crawler.save()
         except Exception as e:
             crawler.status = 'Error'
@@ -93,4 +88,3 @@ def crawl(crawler):
     crawler.status = 'Finished'
     crawler.progress = None
     crawler.save()
-    print('Crawling finished')
