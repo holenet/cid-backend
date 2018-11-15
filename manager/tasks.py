@@ -20,7 +20,11 @@ def crawl_help(sender, instance, created, **kwargs):
 
 @app.task
 def crawl(crawler_id):
-    crawler = Crawler.objects.get(pk=crawler_id)
+    while True:
+        crawler = Crawler.objects.get(pk=crawler_id)
+        time.sleep(0.1)
+        if crawler is not None:
+            break
     crawler.status = 'Crawling'
     crawler.progress = 0
     crawler.save()
