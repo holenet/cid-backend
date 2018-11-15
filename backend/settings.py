@@ -60,6 +60,8 @@ FCM_DJANGO_SETTINGS = {
 with open(os.path.join(BASE_DIR, 'server_key.txt')) as f:
     FCM_DJANGO_SETTINGS['FCM_SERVER_KEY'] = f.readline().strip()
 
+CELERY_BROKER_URL = 'amqp://localhost'
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
