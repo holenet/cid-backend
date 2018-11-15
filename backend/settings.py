@@ -21,8 +21,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = '9)bq%t2f-e4eb^gjs0yumadur+67a)&a!*a5eokj5p)j7lfl_i'
-with open(os.path.join(BASE_DIR, 'server_key.txt')) as f:
-    SERVER_KEY = f.readline().strip()
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -41,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'fcm_django',
     'manager.apps.ManagerConfig',
     'chatbot.apps.ChatbotConfig',
 ]
@@ -53,6 +52,12 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     )
 }
+
+FCM_DJANGO_SETTINGS = {
+    'ONE_DEVICE_PER_USER': True
+}
+with open(os.path.join(BASE_DIR, 'server_key.txt')) as f:
+    FCM_DJANGO_SETTINGS['FCM_SERVER_KEY'] = f.readline().strip()
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

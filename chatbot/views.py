@@ -1,9 +1,11 @@
 import socket
 from threading import Thread
 
+import requests
 from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
 from django.db.utils import IntegrityError
+from fcm_django.models import FCMDevice
 
 from rest_framework import generics
 from rest_framework.authtoken.models import Token
@@ -34,6 +36,7 @@ def signup(request):
     if username is None or password is None:
         return Response({'error': 'username/password not given'}, status=HTTP_400_BAD_REQUEST)
 
+    user = None
     try:
         user = Muser.objects.create_user(username=username, password=password)
         password_validation.validate_password(password, user=user)
@@ -41,7 +44,8 @@ def signup(request):
     except IntegrityError:
         return Response({'error': 'username already taken'}, status=HTTP_400_BAD_REQUEST)
     except exceptions.ValidationError as e:
-        user.delete()
+        if user is not None:
+            user.delete()
         return Response({'error': e}, status=HTTP_400_BAD_REQUEST)
 
 
@@ -66,9 +70,11 @@ def signin(request):
     user = authenticate(username=username, password=password)
     if not user:
         return Response({'error': 'credentials invalid'}, status=HTTP_404_NOT_FOUND)
-    muser = Muser.objects.get_by_natural_key(user.username)
-    muser.push_token = push_token
-    muser.save()
+
+    device, _ = FCMDevice.objects.get_or_create(registration_id=push_token)
+    device.user = user
+    device.active = True
+    device.save()
 
     Thread(target=greet, args=(user,)).start()
 
@@ -87,9 +93,11 @@ def signout(request):
     try:
         token = Token.objects.get(key=key)
         if token.user:
-            muser = Muser.objects.get_by_natural_key(token.user.username)
-            muser.push_token = None
-            muser.save()
+            device = FCMDevice.objects.filter(user=token.user).first()
+            if device:
+                device.user = None
+                device.active = False
+                device.save()
         token.delete()
         return Response(status=HTTP_200_OK)
     except exceptions.ObjectDoesNotExist:
@@ -151,18 +159,29 @@ class Chat(generics.ListCreateAPIView):
         user = self.request.user
         return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
 
-    def respond(self, user, text, serializer):
+    def respond(self, user, text):
         from random import sample
 
         text = chatscript(user.username, text)
         chips = sample(range(0, 20), 4)
-        serializer.save(receiver=user, text=text, chips=chips)
+        message = Message.objects.create(receiver=user, text=text, chips=chips)
+
+        device = FCMDevice.objects.filter(user=user).first()
+        if device:
+            retry = 10
+            for _ in range(retry):
+                try:
+                    device.send_message(data={'message_id': message.id, 'text': text})
+                except requests.exceptions.ReadTimeout as e:
+                    print(e)
+                else:
+                    break
 
     def perform_create(self, serializer):
         user = Muser.objects.get_by_natural_key(self.request.user.username)
         text = self.request.data.get('text')
 
-        Thread(target=self.respond, args=(user, text, serializer, )).start()
+        Thread(target=self.respond, args=(user, text)).start()
         serializer.save(sender=user, text=text)
 
 
