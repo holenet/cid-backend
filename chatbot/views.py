@@ -1,5 +1,5 @@
 import socket
-from multiprocessing import Process
+from threading import Thread
 
 from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
@@ -70,7 +70,7 @@ def signin(request):
     muser.push_token = push_token
     muser.save()
 
-    Process(target=greet, args=(user,)).start()
+    Thread(target=greet, args=(user,)).start()
 
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key}, status=HTTP_200_OK)
@@ -162,7 +162,7 @@ class Chat(generics.ListCreateAPIView):
         user = Muser.objects.get_by_natural_key(self.request.user.username)
         text = self.request.data.get('text')
 
-        Process(target=self.respond, args=(user, text, serializer, )).start()
+        Thread(target=self.respond, args=(user, text, serializer, )).start()
         serializer.save(sender=user, text=text)
 
 

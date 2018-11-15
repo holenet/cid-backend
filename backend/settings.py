@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'manager.apps.ManagerConfig',
     'chatbot.apps.ChatbotConfig',
 ]
 
