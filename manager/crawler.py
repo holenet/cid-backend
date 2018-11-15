@@ -1,17 +1,11 @@
-import os
+import time
 import requests
 from bs4 import BeautifulSoup
 
-from django.db import connection
-from django.db.models import signals
-from django.dispatch import receiver
-from manager.models import Crawler, CrawlerStatus
 from chatbot.models import Artist, Music, Album
 
 
 def crawl_genre(genre, url, headers):
-    connection.close()
-
     print(f'==================== {genre} ====================')
 
     html = requests.get(url=url, headers=headers).text
@@ -27,7 +21,9 @@ def crawl_genre(genre, url, headers):
         artist_id = wrap[1]['href'].split('.')[2].split("'")[1]
         artist_ids.add(artist_id)
 
-    for artist_id in artist_ids:
+    for i, artist_id in enumerate(artist_ids):
+        yield i, len(artist_ids)
+
         artist_url = "https://www.melon.com/artist/song.htm?artistId=" + str(artist_id)
         html = requests.get(url=artist_url, headers=headers).text
         soup = BeautifulSoup(html, 'html.parser')
@@ -52,14 +48,10 @@ def crawl_genre(genre, url, headers):
                 music.artists.add(artist)
 
 
-@receiver(signals.post_save, sender=Crawler)
-def crawl(sender, instance, **kwargs):
-    connection.connect()
-
-    status = CrawlerStatus.objects.create()
-
-    if os.fork() != 0:
-        return
+def crawl(crawler):
+    crawler.status = 'Crawling'
+    crawler.progress = 0
+    crawler.save()
 
     urls = {
         'pop': 'https://www.melon.com/genre/song_list.htm?gnrCode=GN0900&steadyYn=Y',
@@ -74,11 +66,31 @@ def crawl(sender, instance, **kwargs):
         'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:63.0) Gecko/20100101 Firefox/63.0',
     }
 
-    for genre, url in urls.items():
-        crawl_genre(genre, url, headers)
-        status.progress += 16
-        status.save()
+    last = None
+    for i, (genre, url) in enumerate(urls.items()):
+        try:
+            for j, t in crawl_genre(genre, url, headers):
+                if not last:
+                    last = time.time()
+                crawler.refresh_from_db()
+                if crawler.destroy:
+                    crawler.status = 'Canceled'
+                    crawler.save()
+                    return
+                progress = i / len(urls) + j / t / len(urls)
+                crawler.progress = 100 * progress
+                current = time.time()
+                if progress != 0:
+                    crawler.remain = (current - last) / progress * (1 - progress)
+                print(f'...{crawler.progress} %')
+                crawler.save()
+        except Exception as e:
+            crawler.status = 'Error'
+            crawler.error = str(e)
+            crawler.save()
+            return
 
-    status.progress = 100
-    status.save()
+    crawler.status = 'Finished'
+    crawler.progress = None
+    crawler.save()
     print('Crawling finished')
