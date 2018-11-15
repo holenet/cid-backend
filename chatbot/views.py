@@ -1,9 +1,7 @@
-import socket
-from threading import Thread
-
 from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
 from django.db.utils import IntegrityError
+from fcm_django.models import FCMDevice
 
 from rest_framework import generics
 from rest_framework.authtoken.models import Token
@@ -14,16 +12,7 @@ from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP
 
 from chatbot.models import Muser, Message
 from chatbot.serializers import MuserSerializer, MessageSerializer
-
-
-def chatscript(username, text):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect(('localhost', 1024))
-    content = f'{username}\0\0{text}\0'
-    sock.send(bytes(content, encoding='utf-8'))
-    response = sock.recv(1024).decode('utf-8')
-    sock.close()
-    return response
+from chatbot.tasks import respond, chatscript, greet
 
 
 @api_view(['POST'])
@@ -34,6 +23,7 @@ def signup(request):
     if username is None or password is None:
         return Response({'error': 'username/password not given'}, status=HTTP_400_BAD_REQUEST)
 
+    user = None
     try:
         user = Muser.objects.create_user(username=username, password=password)
         password_validation.validate_password(password, user=user)
@@ -41,15 +31,11 @@ def signup(request):
     except IntegrityError:
         return Response({'error': 'username already taken'}, status=HTTP_400_BAD_REQUEST)
     except exceptions.ValidationError as e:
-        user.delete()
+        if user is not None:
+            user.delete()
         return Response({'error': e}, status=HTTP_400_BAD_REQUEST)
 
 
-def greet(user):
-    text = chatscript(user.username, '')
-    serializer = MessageSerializer(data=dict(receiver=user, text=text))
-    if serializer.is_valid():
-        serializer.save()
 
 
 @api_view(['POST'])
@@ -66,11 +52,13 @@ def signin(request):
     user = authenticate(username=username, password=password)
     if not user:
         return Response({'error': 'credentials invalid'}, status=HTTP_404_NOT_FOUND)
-    muser = Muser.objects.get_by_natural_key(user.username)
-    muser.push_token = push_token
-    muser.save()
 
-    Thread(target=greet, args=(user,)).start()
+    device, _ = FCMDevice.objects.get_or_create(registration_id=push_token)
+    device.user = user
+    device.active = True
+    device.save()
+
+    greet.delay(user.id)
 
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key}, status=HTTP_200_OK)
@@ -87,9 +75,11 @@ def signout(request):
     try:
         token = Token.objects.get(key=key)
         if token.user:
-            muser = Muser.objects.get_by_natural_key(token.user.username)
-            muser.push_token = None
-            muser.save()
+            device = FCMDevice.objects.filter(user=token.user).first()
+            if device:
+                device.user = None
+                device.active = False
+                device.save()
         token.delete()
         return Response(status=HTTP_200_OK)
     except exceptions.ObjectDoesNotExist:
@@ -151,19 +141,11 @@ class Chat(generics.ListCreateAPIView):
         user = self.request.user
         return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
 
-    def respond(self, user, text, serializer):
-        from random import sample
-
-        text = chatscript(user.username, text)
-        chips = sample(range(0, 20), 4)
-        serializer.save(receiver=user, text=text, chips=chips)
-
     def perform_create(self, serializer):
         user = Muser.objects.get_by_natural_key(self.request.user.username)
         text = self.request.data.get('text')
-
-        Thread(target=self.respond, args=(user, text, serializer, )).start()
         serializer.save(sender=user, text=text)
+        respond.delay(user.id, text)
 
 
 class ChatDetail(generics.RetrieveAPIView):

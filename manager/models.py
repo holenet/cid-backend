@@ -1,8 +1,4 @@
-from threading import Thread
-
 from django.db import models
-
-from manager.crawler import crawl
 
 
 class Crawler(models.Model):
@@ -21,9 +17,3 @@ class Crawler(models.Model):
                 return f'{self.created} {self.status}...{self.progress:.1f}% ({self.remain}s remaining)'
             return f'{self.created} {self.status}...{self.progress:.1f}%'
         return f'{self.created} {self.status}'
-
-    def save(self, *args, **kwargs):
-        is_first = self.id is None
-        super(Crawler, self).save(*args, **kwargs)
-        if is_first:
-            Thread(target=crawl, args=(self,)).start()
