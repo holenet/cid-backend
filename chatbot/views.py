@@ -29,7 +29,7 @@ def signup(request):
         password_validation.validate_password(password, user=user)
         return Response({'detail': 'sign-up successful'}, status=HTTP_200_OK)
     except IntegrityError:
-        return Response({'username': ['username already taken']}, status=HTTP_400_BAD_REQUEST)
+        return Response({'username': 'username already taken'}, status=HTTP_400_BAD_REQUEST)
     except exceptions.ValidationError as e:
         if user is not None:
             user.delete()
