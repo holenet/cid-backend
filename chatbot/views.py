@@ -49,7 +49,7 @@ def signin(request):
 
     user = authenticate(username=username, password=password)
     if not user:
-        return Response({'error': 'credentials invalid'}, status=HTTP_404_NOT_FOUND)
+        return Response({'error': 'username/password invalid'}, status=HTTP_404_NOT_FOUND)
 
     device, _ = FCMDevice.objects.get_or_create(registration_id=push_token)
     device.user = user
