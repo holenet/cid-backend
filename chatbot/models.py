@@ -1,6 +1,3 @@
-import pyfcm
-from django.conf import settings
-
 from django.core.validators import int_list_validator
 from django.db import models
 from django.contrib.auth import models as auth_models
@@ -19,9 +16,10 @@ class Muser(auth_models.User):
 
 
 class Artist(models.Model):
+    original_id = models.IntegerField()
     name = models.CharField(max_length=100, blank=True, default='')
     debut = models.DateField(blank=True, null=True)
-    agent = models.CharField(max_length=100, blank=True, default='')
+    agent = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -43,7 +41,9 @@ class GroupArtist(Artist):
 
 
 class Album(models.Model):
-    title = models.CharField(max_length=100, blank=True, default='')
+    original_id = models.IntegerField()
+    title = models.CharField(max_length=100, blank=True)
+    genre = models.CharField(max_length=100, blank=True, null=True)
     artists = models.ManyToManyField(Artist)
     release = models.DateField(blank=True, null=True)
 
@@ -55,7 +55,6 @@ class Music(models.Model):
     title = models.CharField(max_length=100)
     album = models.ForeignKey('chatbot.Album', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
     artists = models.ManyToManyField(Artist)
-    genre = models.CharField(max_length=100, blank=True, default='')
     length = models.PositiveSmallIntegerField(blank=True, default=0)
 
     def __str__(self):
