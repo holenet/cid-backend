@@ -5,6 +5,7 @@ import os
 import time
 import traceback
 import urllib.request
+import lxml.html
 
 import requests
 from bs4 import BeautifulSoup
@@ -25,11 +26,11 @@ driver_path = os.path.join(settings.BASE_DIR, 'chromedriver')
 @receiver(signals.post_save, sender=Crawler)
 def crawl_help(sender, instance, created, **kwargs):
     if created:
-        crawl_selenium.delay(instance.id)
+        crawl.delay(instance.id)
 
 
 @app.task
-def crawl_selenium(crawler_id):
+def crawl(crawler_id):
     while True:
         crawler = Crawler.objects.get(pk=crawler_id)
         time.sleep(0.1)
@@ -54,6 +55,11 @@ def crawl_selenium(crawler_id):
         'https://www.melon.com/genre/song_list.htm?gnrCode=GN1300&steadyYn=Y',
         'https://www.melon.com/genre/song_list.htm?gnrCode=GN1400&steadyYn=Y',
     )
+    headers = {'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:63.0) Gecko/20100101 Firefox/63.0'}
+
+    def get_tree(url):
+        html = requests.get(url=url, headers=headers).text
+        return lxml.html.document_fromstring(html)
 
     def close_driver():
         try:
@@ -62,8 +68,11 @@ def crawl_selenium(crawler_id):
             print(e)
             pass
 
-    def get_id(link):
+    def get_id_selenium(link):
         return int(''.join(filter(lambda x: x.isnumeric(), link.get_property('href'))))
+
+    def get_id_lxml(link):
+        return int(''.join(filter(lambda x: x.isnumeric(), link.get('href'))))
 
     def to_date(text: None):
         if text is None:
@@ -83,18 +92,18 @@ def crawl_selenium(crawler_id):
         print(f'______ Album {album_id}')
 
         album_url = f'https://www.melon.com/album/detail.htm?albumId={album_id}'
-        driver.get(album_url)
+        tree = get_tree(album_url)
 
-        album_title = driver.find_element_by_xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[1]/div[1]').text
+        album_title = tree.xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[1]/div[1]')[0].text_content().replace('앨범명', '').strip()
         print(f'====== {album_title}')
 
         # Gather Album Information
-        album_info = driver.find_element_by_xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[2]/dl')
+        album_info = tree.xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[2]/dl')[0]
         info_keys = ('발매일', '장르')
         info_key = None
         info_fields = [None] * len(info_keys)
-        for elt in album_info.find_elements_by_xpath('.//*'):
-            data = elt.text.strip()
+        for elt in album_info.xpath('.//*'):
+            data = elt.text_content().strip()
             if data in info_keys:
                 info_key = data
             elif info_key is not None:
@@ -102,8 +111,8 @@ def crawl_selenium(crawler_id):
                 info_key = None
 
         # Download Album Image
-        album_image = driver.find_element_by_xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[1]/a/img')
-        image_url = album_image.get_property('src').split('/melon/resize')[0]
+        album_image = tree.xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[1]/a/img')[0]
+        image_url = album_image.get('src').split('/melon/resize')[0]
         result = urllib.request.urlretrieve(image_url)
         image_path = result[0]
 
@@ -118,12 +127,12 @@ def crawl_selenium(crawler_id):
 
         # Gather Artist Ids
         try:
-            artists = driver.find_elements_by_xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[1]/div[3]/div/ul/li[*]/a')
+            artists = tree.xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[1]/div[3]/div/ul/li[*]/a')
         except NoSuchElementException:
-            artists = driver.find_elements_by_xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[1]/div[2]/a[*]')
+            artists = tree.xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[1]/div[2]/a[*]')
         artist_ids = set()
         for artist in artists:
-            artist_ids.add(get_id(artist))
+            artist_ids.add(get_id_lxml(artist))
         for artist_id in artist_ids:
             crawl_artist(artist_id)
             album.artists.add(Artist.objects.get(original_id=artist_id))
@@ -132,12 +141,12 @@ def crawl_selenium(crawler_id):
         driver.get(album_url)
         musics = []
         artist_ids = []
-        for music_elt in driver.find_elements_by_xpath('/html/body/div[1]/div[3]/div/div/div[3]/form/div/table/tbody/tr[*]'):
+        for music_elt in tree.xpath('/html/body/div[1]/div[3]/div/div/div[3]/form/div/table/tbody/tr[*]'):
             try:
-                music_title = music_elt.find_element_by_xpath('.//td[4]/div/div/div[1]/span/a').text
+                music_title = music_elt.xpath('.//td[4]/div/div/div[1]/span/a')[0].text_content().strip()
             except NoSuchElementException:
                 try:
-                    music_title = music_elt.find_element_by_xpath('.//td[4]/div/div/div[1]/span/span[2]').text
+                    music_title = music_elt.xpath('.//td[4]/div/div/div[1]/span/span[2]')[0].text_content().strip()
                 except NoSuchElementException:
                     continue
             print(f'......... {music_title}')
@@ -147,8 +156,8 @@ def crawl_selenium(crawler_id):
 
             # Gather Artist Ids
             artist_id_set = set()
-            for artist in driver.find_elements_by_xpath('.//td[4]/div/div/div[2]/a[*]'):
-                artist_id_set.add(get_id(artist))
+            for artist in tree.xpath('.//td[4]/div/div/div[2]/a[*]'):
+                artist_id_set.add(get_id_lxml(artist))
             artist_ids.append(artist_id_set)
 
         # Crawl Artists
@@ -166,18 +175,18 @@ def crawl_selenium(crawler_id):
         print(f'___ Artist {artist_id}')
 
         artist_url = f'https://www.melon.com/artist/album.htm?artistId={artist_id}'
-        driver.get(artist_url)
+        tree = get_tree(artist_url)
 
-        artist_name = driver.find_element_by_xpath('/html/body/div/div[3]/div/div/div[1]/div/div[2]/p').text
+        artist_name = tree.xpath('/html/body/div/div[3]/div/div/div[1]/div/div[2]/p')[0].text_content().replace('아티스트명', '').strip()
         print(f'=== {artist_name}')
 
         # Gather Artist Information
-        artist_info = driver.find_element_by_xpath('/html/body/div/div[3]/div/div/div[1]/div/div[2]/dl[1]')
+        artist_info = tree.xpath('/html/body/div/div[3]/div/div/div[1]/div/div[2]/dl[1]')[0]
         info_keys = ('활동유형', '데뷔', '소속사', '생일')
         info_key = None
         info_fields = [None] * len(info_keys)
-        for elt in artist_info.find_elements_by_xpath('.//*'):
-            data = elt.text.strip()
+        for elt in artist_info.xpath('.//*'):
+            data = elt.text_content().strip()
             if data in info_keys:
                 info_key = data
             elif info_key is not None:
@@ -201,10 +210,10 @@ def crawl_selenium(crawler_id):
         elif info_fields[0] is not None and '그룹' in info_fields[0]:
             artist = GroupArtist.objects.create(original_id=artist_id)
 
-            members = driver.find_elements_by_xpath('/html/body/div/div[3]/div/div/div[1]/div/div[2]/div/a[*]')
+            members = tree.xpath('/html/body/div/div[3]/div/div/div[1]/div/div[2]/div/a[*]')
             member_ids = set()
             for member in members:
-                member_ids.add(get_id(member))
+                member_ids.add(get_id_lxml(member))
             for member_id in member_ids:
                 member = crawl_artist(member_id)
                 artist.members.add(member)
@@ -224,7 +233,7 @@ def crawl_selenium(crawler_id):
                 albums = driver.find_elements_by_xpath('/html/body/div/div[3]/div/div/div[4]/div[2]/form/div/ul/li[*]/div/div/dl/dt/a')
                 album_ids = set()
                 for album in albums:
-                    album_ids.add(get_id(album))
+                    album_ids.add(get_id_selenium(album))
                 for album_id in album_ids:
                     crawl_album(album_id)
             except StaleElementReferenceException:
@@ -234,13 +243,13 @@ def crawl_selenium(crawler_id):
         return artist
 
     def crawl_genre(url):
-        driver.get(url)
+        tree = get_tree(url)
 
         # Gather Artist Ids
-        artists = driver.find_elements_by_xpath('/html/body/div/div[3]/div/div/div[7]/form/div/table/tbody/tr[*]/td[5]/div/div/div[2]/a')
+        artists = tree.xpath('/html/body/div/div[3]/div/div/div[7]/form/div/table/tbody/tr[*]/td[5]/div/div/div[2]/a')
         artist_ids = set()
         for i, artist in enumerate(artists):
-            artist_ids.add(get_id(artist))
+            artist_ids.add(get_id_lxml(artist))
 
         for i, artist_id in enumerate(artist_ids):
             yield i, len(artist_ids)
