@@ -4,10 +4,12 @@ import datetime
 import os
 import time
 import traceback
+import urllib.request
 
 import requests
 from bs4 import BeautifulSoup
 from django.conf import settings
+from django.core.files import File
 from django.db.models import signals
 from django.dispatch import receiver
 from selenium import webdriver
@@ -99,6 +101,12 @@ def crawl_selenium(crawler_id):
                 info_fields[info_keys.index(info_key)] = data
                 info_key = None
 
+        # Download Album Image
+        album_image = driver.find_element_by_xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[1]/a/img')
+        image_url = album_image.get_property('src').split('/melon/resize')[0]
+        result = urllib.request.urlretrieve(image_url)
+        image_path = result[0]
+
         # Create Album
         album = Album.objects.create(
             original_id=album_id,
@@ -106,6 +114,7 @@ def crawl_selenium(crawler_id):
             release=to_date(info_fields[0]),
             genre=info_fields[1],
         )
+        album.image.save(os.path.basename(image_url), File(open(image_path, 'rb')))
 
         # Gather Artist Ids
         try:

@@ -1,3 +1,5 @@
+import os
+
 from django.core.validators import int_list_validator
 from django.db import models
 from django.contrib.auth import models as auth_models
@@ -40,12 +42,22 @@ class GroupArtist(Artist):
         return self.name
 
 
+def album_image_path(album, filename):
+    ext = os.path.splitext(filename)[1]
+    for default_ext in ('.jpg', '.png', '.jpeg', '.bmp'):
+        if default_ext in ext:
+            ext = default_ext
+            break
+    return os.path.join('album_image', f"{album.title.replace('/', '-')}{ext}")
+
+
 class Album(models.Model):
     original_id = models.IntegerField()
     title = models.CharField(max_length=100, blank=True)
     genre = models.CharField(max_length=100, blank=True, null=True)
     artists = models.ManyToManyField(Artist)
     release = models.DateField(blank=True, null=True)
+    image = models.ImageField(null=True, upload_to=album_image_path)
 
     def __str__(self):
         return self.title
