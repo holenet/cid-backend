@@ -36,7 +36,7 @@ class SoloArtist(Artist):
 
 
 class GroupArtist(Artist):
-    members = models.ManyToManyField(SoloArtist)
+    members = models.ManyToManyField(Artist, related_name='group_set')
 
     def __str__(self):
         return self.name
@@ -68,6 +68,7 @@ class Music(models.Model):
     album = models.ForeignKey('chatbot.Album', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
     artists = models.ManyToManyField(Artist)
     length = models.PositiveSmallIntegerField(blank=True, default=0)
+    original_rating = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.title
