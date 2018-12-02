@@ -13,6 +13,9 @@ class Muser(auth_models.User):
 
     push_token = models.CharField(max_length=200, blank=True, null=True)
 
+    class Meta:
+        verbose_name = 'Muser'
+
     def __str__(self):
         return self.username
 
@@ -55,7 +58,7 @@ class Album(models.Model):
     original_id = models.IntegerField()
     title = models.CharField(max_length=100, blank=True)
     genre = models.CharField(max_length=100, blank=True, null=True)
-    artists = models.ManyToManyField(Artist)
+    artists = models.ManyToManyField(Artist, related_name='albums')
     release = models.DateField(blank=True, null=True)
     image = models.ImageField(null=True, upload_to=album_image_path)
 
@@ -66,7 +69,7 @@ class Album(models.Model):
 class Music(models.Model):
     title = models.CharField(max_length=100)
     album = models.ForeignKey('chatbot.Album', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
-    artists = models.ManyToManyField(Artist)
+    artists = models.ManyToManyField(Artist, related_name='music')
     length = models.PositiveSmallIntegerField(blank=True, default=0)
     original_rating = models.PositiveIntegerField(default=0)
 
