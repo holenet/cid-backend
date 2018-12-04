@@ -4,20 +4,24 @@ from .models import *
 
 
 class CrawlerAdmin(admin.ModelAdmin):
-    list_display = ('id', 'level', 'status', 'progress_percentage', 'remain_time', 'created', 'destroy')
-    readonly_fields = ('id', 'status', 'progress', 'remain', 'error', 'created')
+    list_display = ('id', 'level', 'status', 'detail', 'progress_percentage', 'elapsed_time', 'remaining_time', 'started', 'cancel')
+    readonly_fields = ('id', 'status', 'progress', 'remain', 'error', 'detail', 'created', 'started', 'elapsed')
 
     def progress_percentage(self, obj):
         if obj.progress is not None:
-            return f'{obj.progress:.1f}%'
+            return f'{obj.progress:.1f} %'
         else:
             return None
 
-    def remain_time(self, obj):
+    def elapsed_time(self, obj):
+        if obj.elapsed is not None:
+            return f'{obj.elapsed} s'
+        return None
+
+    def remaining_time(self, obj):
         if obj.remain is not None:
             return f'{obj.remain} s'
-        else:
-            return None
+        return None
 
 
 admin.site.register(Crawler, CrawlerAdmin)

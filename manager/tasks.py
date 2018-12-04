@@ -32,11 +32,12 @@ def crawl_help(sender, instance, created, **kwargs):
 @app.task
 def crawl(crawler_id):
     while True:
-        crawler = Crawler.objects.get(pk=crawler_id)
+        crawler = Crawler.objects.filter(pk=crawler_id).first()
         time.sleep(0.1)
         if crawler is not None:
             break
     crawler.status = 'Crawling'
+    crawler.started = datetime.datetime.now()
     crawler.progress = 0
     crawler.save()
 
@@ -56,10 +57,16 @@ def crawl(crawler_id):
         'https://www.melon.com/genre/song_list.htm?gnrCode=GN1400&steadyYn=Y',
     )
     headers = {'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:63.0) Gecko/20100101 Firefox/63.0'}
+    crawled_album_ids = set()
+    crawled_artist_ids = set()
+    crawled_music_numbers = dict()
     fully_crawled_artist_ids = set()
 
-    def get_elapsed_time():
-        return f'{time.time() - crawler.created.timestamp():.1f}'
+    def update_crawler_detail():
+        crawler.detail = f'music {sum(crawled_music_numbers.values())}, album {len(crawled_album_ids)}, artist {len(crawled_artist_ids)}'
+
+    def update_crawler_elapsed():
+        crawler.elapsed = time.time() - crawler.started.timestamp()
 
     def get_tree(url):
         html = requests.get(url=url, headers=headers).text
@@ -91,8 +98,11 @@ def crawl(crawler_id):
         return text
 
     def crawl_album(album_id, stack):
+        crawled_album_ids.add(album_id)
         album = Album.objects.filter(original_id=album_id).first()
         if album:
+            if album_id not in crawled_music_numbers:
+                crawled_music_numbers[album_id] = album.music.count()
             return album
         stack.append(('album', album_id))
         print(f'{"-"*len(stack)} Album {album_id}')
@@ -168,6 +178,7 @@ def crawl(crawler_id):
             for artist in tree.xpath(".//a[contains(@href,'goArtistDetail')]"):
                 artist_id_set.add(get_id_lxml(artist))
             artist_ids.append(artist_id_set)
+        crawled_music_numbers[album_id] = len(musics)
         print(f'............................. {len(musics)}')
 
         # Crawl Artists
@@ -181,6 +192,7 @@ def crawl(crawler_id):
         return album
 
     def crawl_artist(artist_id, stack):
+        crawled_artist_ids.add(artist_id)
         artist = Artist.objects.filter(original_id=artist_id).first()
         if ('artist', artist_id) in stack or artist_id in fully_crawled_artist_ids:
             return artist
@@ -295,34 +307,42 @@ def crawl(crawler_id):
                     last = time.time()
                 crawler.refresh_from_db()
                 # Cancel
-                if crawler.destroy:
+                if crawler.cancel:
                     crawler.status = 'Canceled'
                     crawler.remain = None
+                    update_crawler_detail()
+                    update_crawler_elapsed()
                     crawler.save()
                     close_driver()
                     print('Crawling Canceled')
                     return
                 # Update Progress
                 progress = i / len(urls) + j / t / len(urls)
-                crawler.status = f'Crawling (elapsed {get_elapsed_time()} s)'
+                crawler.status = 'Crawling'
                 crawler.progress = 100 * progress
                 current = time.time()
                 if progress != 0:
                     crawler.remain = (current - last) / progress * (1 - progress)
+                update_crawler_detail()
+                update_crawler_elapsed()
                 crawler.save()
         except:
             # Error
-            crawler.status = 'Error'
-            crawler.error = traceback.format_exc() + f'\n{driver.current_url}'
+            crawler.status = 'Error Occurred'
+            crawler.error = traceback.format_exc()
             crawler.remain = None
+            update_crawler_detail()
+            update_crawler_elapsed()
             crawler.save()
             close_driver()
             print('Crawling Error Occurred')
             return
     # Finish
-    crawler.status = f'Finished (elapsed {get_elapsed_time()} s)'
+    crawler.status = 'Finished'
     crawler.progress = 100
     crawler.remain = None
+    update_crawler_elapsed()
+    update_crawler_detail()
     crawler.save()
     close_driver()
     print('Crawling Finished')
