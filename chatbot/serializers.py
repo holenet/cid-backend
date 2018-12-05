@@ -18,10 +18,6 @@ class MusicSerializer(serializers.ModelSerializer):
     album_id = serializers.ReadOnlyField(source='album.id')
     album = serializers.StringRelatedField()
     artists = serializers.StringRelatedField(many=True)
-    album_image_url = serializers.SerializerMethodField()
-
-    def get_album_image_url(self, obj):
-        return self.context['request'].build_absolute_uri(obj.album.image.url)
 
     class Meta:
         model = Music
