@@ -21,7 +21,7 @@ class MusicSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Music
-        fields = ('title', 'album', 'album_image_url', 'artists', 'length')
+        fields = ('title', 'album_id', 'album', 'artists', 'length')
 
 
 class MessageSerializer(serializers.ModelSerializer):
