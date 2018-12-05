@@ -15,6 +15,7 @@ class MuserSerializer(serializers.ModelSerializer):
 
 
 class MusicSerializer(serializers.ModelSerializer):
+    album_id = serializers.ReadOnlyField(source='album.id')
     album = serializers.StringRelatedField()
     artists = serializers.StringRelatedField(many=True)
     album_image_url = serializers.SerializerMethodField()
