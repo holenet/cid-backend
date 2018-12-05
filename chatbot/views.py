@@ -1,6 +1,9 @@
+import mimetypes
+
 from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
 from django.db.utils import IntegrityError
+from django.http import HttpResponse
 from fcm_django.models import FCMDevice
 
 from rest_framework import generics
@@ -156,10 +159,12 @@ class ChatDetail(generics.RetrieveAPIView):
 
 @api_view(['GET'])
 @permission_classes((AllowAny,))
-def album_image_url(request, album_id):
+def album_image(request, album_id):
     try:
         album = Album.objects.get(id=album_id)
     except Album.DoesNotExist:
         return Response({'detail': 'The album does not exist'}, status=HTTP_404_NOT_FOUND)
-    album_url = request.build_absolute_uri(album.image.url)
-    return Response({'url': album_url}, status=HTTP_200_OK)
+    with open(album.image.path, 'rb') as f:
+        response = HttpResponse(f, content_type=mimetypes.guess_type(album.image.path))
+        response['Content-Disposition'] = f'attachment; filename={album.image.name}'
+        return response
