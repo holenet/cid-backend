@@ -161,6 +161,6 @@ def album_image_url(request):
     try:
         album = Album.objects.get(id=album_id)
     except Album.DoesNotExist:
-        return Response(status=HTTP_404_NOT_FOUND)
+        return Response({'detail': 'The album does not exist'}, status=HTTP_404_NOT_FOUND)
     album_url = request.build_absolute_uri(album.image.url)
     return Response({'url': album_url}, status=HTTP_200_OK)
