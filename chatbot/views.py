@@ -136,7 +136,6 @@ class Chat(generics.ListCreateAPIView):
     serializer_class = MessageSerializer
 
     def get_queryset(self):
-        return Message.objects.all()
         user = self.request.user
         return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
 
@@ -151,6 +150,5 @@ class ChatDetail(generics.RetrieveAPIView):
     serializer_class = MessageSerializer
 
     def get_queryset(self):
-        return Message.objects.all()
         user = self.request.user
         return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
