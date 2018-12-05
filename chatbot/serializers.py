@@ -15,6 +15,8 @@ class MuserSerializer(serializers.ModelSerializer):
 
 
 class MusicSerializer(serializers.ModelSerializer):
+    album = serializers.StringRelatedField()
+    artists = serializers.StringRelatedField(many=True)
     album_image_url = serializers.SerializerMethodField()
 
     def get_album_image_url(self, obj):
