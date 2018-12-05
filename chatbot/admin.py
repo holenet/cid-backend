@@ -97,6 +97,7 @@ class MuserAdmin(admin.ModelAdmin):
 
 class MessageAdmin(admin.ModelAdmin):
     list_display = ('id', 'direction', 'text', 'created', 'music', 'number_of_chips')
+    readonly_fields = ('id', 'sender', 'receiver', 'direction', 'text', 'created', 'music', 'chips')
 
     def direction(self, obj):
         if obj.sender is None:
@@ -106,7 +107,7 @@ class MessageAdmin(admin.ModelAdmin):
 
     def number_of_chips(self, obj):
         if obj.music is not None:
-            return obj.chips.count()
+            return len(eval(obj.chips))
         return None
     number_of_chips.short_description = '# of chips'
 
