@@ -156,8 +156,7 @@ class ChatDetail(generics.RetrieveAPIView):
 
 @api_view(['GET'])
 @permission_classes((AllowAny,))
-def album_image_url(request):
-    album_id = request.data.get('album_id')
+def album_image_url(request, album_id):
     try:
         album = Album.objects.get(id=album_id)
     except Album.DoesNotExist:
