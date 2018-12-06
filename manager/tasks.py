@@ -8,6 +8,7 @@ import traceback
 import urllib.request
 import urllib.error
 from queue import Queue
+from random import shuffle
 
 import lxml.html
 
@@ -161,7 +162,7 @@ def crawl_album(album_id):
 
 
 def crawl_artist(artist_id, driver, simple):
-    artist_url = f'https://www.melon.com/artist/album.htm?artistId={artist_id}'
+    artist_url = f'https://www.melon.com/artist/song.htm?artistId={artist_id}'
     tree = get_tree(artist_url)
 
     # First Creation
@@ -220,11 +221,11 @@ def crawl_artist(artist_id, driver, simple):
 
     # Gather Album Ids
     driver.get(artist_url)
-    driver.find_element_by_xpath('//*[@id="POPULAR_ALBUM_LIST"]').click()
+    driver.find_element_by_xpath('//*[@id="POPULAR_SONG_LIST"]').click()
     album_ids = set()
     for i in range(100):
         try:
-            albums = driver.find_elements_by_xpath('/html/body/div/div[3]/div/div/div[4]/div[2]/form/div/ul/li[*]/div/div/dl/dt/a')
+            albums = driver.find_elements_by_xpath('/html/body/div/div[3]/div/div/div[4]/div[2]/form/div/table/tbody/tr[*]/td[5]/div/div/a')
             for album in albums:
                 album_ids.add(get_id_selenium(album))
         except StaleElementReferenceException:
@@ -295,7 +296,7 @@ def crawl(crawler_id):
         return [(i, {}) for i in id_list]
 
     def worker(worker_id):
-        print(f'Worker {worker_id} Spawned.')
+        print(f'Worker {worker_id} Spawned')
         driver = webdriver.Chrome(driver_path, chrome_options=options)
 
         def close_driver():
@@ -308,10 +309,9 @@ def crawl(crawler_id):
             crawl_type, crawl_id, depth, kwargs = queue.get()
             if crawl_type is None:
                 break
-            to_do_ids = {'music': set(), 'album': set(), 'artist': set()}
-
             try:
                 # Run Work Items
+                to_do_ids = {'music': set(), 'album': set(), 'artist': set()}
                 if crawl_type == 'music':
                     music_id, album_id, artist_ids = crawl_music(crawl_id, **kwargs)
                     relations['music'][music_id] = (album_id, artist_ids)
@@ -319,12 +319,14 @@ def crawl(crawler_id):
                     to_do_ids['artist'] = emtpy_kwarg_list(artist_ids)
                 elif crawl_type == 'album':
                     album_id, artist_ids, music_ids, music_ratings, music_artist_ids = crawl_album(crawl_id)
-                    relations['album'][album_id] = artist_ids
+                    if artist_ids:
+                        relations['album'][album_id] = artist_ids
                     to_do_ids['artist'] = emtpy_kwarg_list(artist_ids)
                     to_do_ids['music'] = [(music_id, {'album_id': album_id, 'rating': music_ratings[music_id], 'artist_ids': music_artist_ids[music_id]}) for music_id in music_ids]
                 elif crawl_type == 'artist':
                     artist_id, album_ids, member_ids = crawl_artist(crawl_id, driver, depth > max_depth)
-                    relations['artist'][artist_id] = member_ids
+                    if member_ids:
+                        relations['artist'][artist_id] = member_ids
                     to_do_ids['album'] = emtpy_kwarg_list(album_ids)
                     to_do_ids['artist'] = emtpy_kwarg_list(member_ids)
                 else:
@@ -337,7 +339,7 @@ def crawl(crawler_id):
                             queue.put((crawl_type, crawl_id, depth + 1, kwargs))
             except:
                 # Alert to Main Thread That An Exception Has Occurred
-                error.put(f'{traceback.format_exc()}\n{(crawl_type, crawl_id, depth)} on Worker {worker_id}')
+                error.put(f'{traceback.format_exc()}\n{(crawl_type, crawl_id, depth, kwargs)} on Worker {worker_id}')
                 break
             finally:
                 queue.task_done()
@@ -368,12 +370,10 @@ def crawl(crawler_id):
         artists = tree.xpath('/html/body/div/div[3]/div/div/div[7]/form/div/table/tbody/tr[*]/td[5]/div/div/div[2]/a')
         for artist in artists:
             artist_ids.add(get_id_lxml(artist))
-    print(artist_ids)
 
     # Put Initial Work Items
     last_time = time.time()
     for i, artist_id in enumerate(artist_ids):
-        print(f'{i, artist_id}')
         crawler.refresh_from_db()
         # Cancel
         if crawler.cancel:
@@ -385,7 +385,7 @@ def crawl(crawler_id):
             return
 
         # Update Progress
-        progress = i / len(artist_ids)
+        progress = i / len(artist_ids) / 2
         crawler.status = 'Crawling'
         crawler.progress = 100 * progress
         current_time = time.time()
@@ -411,10 +411,135 @@ def crawl(crawler_id):
                     return
                 time.sleep(1)
 
-    # Finish
+    # Crawling Finish
+    crawler.status = 'Relation Constructing'
+    crawler.progress = 50
+    crawler.remain = None
+    update_crawler()
+    join()
+    print('Crawling Finished')
+
+    queue = Queue()
+    error = Queue()
+
+    def worker(worker_id):
+        print(f'Worker {worker_id} Spawned')
+
+        while True:
+            chunk = queue.get()
+            if chunk is None:
+                break
+            print(f'{chunk[0][0]} {len(chunk)}')
+            for model_type, model_id, arg1, arg2 in chunk:
+                try:
+                    if model_type == 'music':
+                        music = Music.objects.get(original_id=model_id)
+                        music.album = Album.objects.get(original_id=arg1)
+                        for artist_id in arg2:
+                            music.artists.add(Artist.objects.get(original_id=artist_id))
+                        music.save()
+                    elif model_type == 'album':
+                        album = Album.objects.get(original_id=model_id)
+                        for artist_id in arg1:
+                            album.artists.add(Artist.objects.get(original_id=artist_id))
+                        album.save()
+                    elif model_type == 'artist':
+                        artist = GroupArtist.objects.get(original_id=model_id)
+                        for member_id in arg1:
+                            artist.members.add(Artist.objects.get(original_id=member_id))
+                        artist.save()
+                    else:
+                        raise Exception(f"Illegal argument model_type: {model_type}")
+                    time.sleep(0.05)
+                except:
+                    # Alert to Main Thread That An Exception Has Occurred
+                    error.put(f'{traceback.format_exc()}\n{(model_type, model_id, arg1, arg2)} on Worker {worker_id}')
+                    break
+            queue.task_done()
+        print(f'Worker {worker_id} Buried...')
+
+    # Spawn Worker Threads
+    workers = []
+    for i in range(1):
+        t = threading.Thread(target=worker, args=(i + 1,))
+        workers.append(t)
+        t.daemon = True
+        t.start()
+
+    def join():
+        with queue.mutex:
+            queue.queue.clear()
+        for _ in range(len(workers)):
+            queue.put(None)
+        for th in workers:
+            th.join()
+
+    # Make Work Items
+    chunk_size = 10
+    items = []
+    music_list = list(relations['music'].items())
+    for i in range(0, len(music_list), chunk_size):
+        music_chunk = music_list[i:i+chunk_size]
+        items.append([('music', music_id, album_id, artist_ids) for music_id, (album_id, artist_ids) in music_chunk])
+    album_list = list(relations['album'].items())
+    for i in range(0, len(album_list), chunk_size):
+        album_chunk = album_list[i:i+chunk_size]
+        items.append([('album', album_id, artist_ids, None) for album_id, artist_ids in album_chunk])
+    artist_list = list(relations['artist'].items())
+    for i in range(0, len(artist_list), chunk_size):
+        artist_chunk = artist_list[i:i+chunk_size]
+        items.append([('artist', artist_id, member_ids, None) for artist_id, member_ids in artist_chunk])
+    shuffle(items)
+
+    def provider():
+        for chunk in items:
+            queue.put(chunk)
+
+    # Put and Wait
+    t = threading.Thread(target=provider)
+    t.daemon = True
+    t.start()
+    total = len(items)
+    last_time = time.time()
+    while queue.unfinished_tasks:
+        crawler.refresh_from_db()
+        # Cancel
+        if crawler.cancel:
+            crawler.status = 'Canceled'
+            crawler.remain = None
+            update_crawler()
+            join()
+            print('Crawling Canceled')
+            return
+
+        # Update Progress
+        progress = 0.5 + (total - queue.unfinished_tasks) / total / 2
+        crawler.status = 'Relating'
+        crawler.progress = 100 * progress
+        current_time = time.time()
+        if progress - 0.5 != 0:
+            crawler.remain = (current_time - last_time) / (progress - 0.5) * (1 - progress)
+        update_crawler()
+
+        for _ in range(10):
+            if not queue.unfinished_tasks:
+                break
+            if error.unfinished_tasks:
+                crawler.status = 'Error Occurred'
+                error_message = error.get()
+                print(error_message)
+                crawler.error = error_message
+                crawler.remain = None
+                update_crawler()
+                join()
+                print('Relating Error Occurred')
+                return
+            time.sleep(1)
+
+    # Relating Finish
     crawler.status = 'Finished'
     crawler.progress = 100
     crawler.remain = None
     update_crawler()
     join()
-    print('Crawling Finished')
+    print('Entire Crawling Finished')
