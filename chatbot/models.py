@@ -46,12 +46,7 @@ class GroupArtist(Artist):
 
 
 def album_image_path(album, filename):
-    ext = os.path.splitext(filename)[1]
-    for default_ext in ('.jpg', '.png', '.jpeg', '.bmp'):
-        if default_ext in ext:
-            ext = default_ext
-            break
-    return os.path.join('album_image', f"{album.title.replace('/', '-')}{ext}")
+    return os.path.join('album_image', f"{album.title.replace('/', '-').replace(' ', '_')}.jpg")
 
 
 class Album(models.Model):
@@ -92,7 +87,7 @@ class Message(models.Model):
     receiver = models.ForeignKey('chatbot.Muser', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
     text = models.TextField(blank=True)
     music = models.ForeignKey('chatbot.Music', on_delete=models.CASCADE, blank=True, null=True)
-    chips = models.CharField(validators=[int_list_validator], max_length=20, blank=True, null=True)
+    chips = models.CharField(validators=[int_list_validator], max_length=100, default=[])
 
     def __str__(self):
         if not self.sender:

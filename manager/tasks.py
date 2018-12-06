@@ -128,7 +128,7 @@ def crawl(crawler_id):
 
         # Download Album Image
         album_image = tree.xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[1]/a/img')[0]
-        image_url = album_image.get('src').split('/melon/resize')[0]
+        image_url = album_image.get('src').strip()
         try:
             result = urllib.request.urlretrieve(image_url)
             image_path = result[0]
