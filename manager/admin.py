@@ -4,7 +4,7 @@ from .models import *
 
 
 class CrawlerAdmin(admin.ModelAdmin):
-    list_display = ('id', 'level', 'status', 'detail', 'progress_percentage', 'elapsed_time', 'remaining_time', 'started', 'cancel')
+    list_display = ('id', 'level', 'thread', 'status', 'detail', 'progress_percentage', 'elapsed_time', 'remaining_time', 'started', 'cancel')
     readonly_fields = ('id', 'status', 'progress', 'remain', 'error', 'detail', 'created', 'started', 'elapsed')
 
     def progress_percentage(self, obj):
