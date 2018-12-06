@@ -64,7 +64,7 @@ class AlbumAdmin(admin.ModelAdmin):
 
 
 class MusicAdmin(admin.ModelAdmin):
-    list_display = ('title', 'album', 'artist', 'length', 'original_rating')
+    list_display = ('title', 'album', 'artist', 'genre', 'length', 'release', 'original_rating', 'original_id')
 
     def artist(self, obj):
         return ellipsize(obj.artists.all())

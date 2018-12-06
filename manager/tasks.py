@@ -57,13 +57,13 @@ def crawl(crawler_id):
         'https://www.melon.com/genre/song_list.htm?gnrCode=GN1400&steadyYn=Y',
     )
     headers = {'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:63.0) Gecko/20100101 Firefox/63.0'}
+    crawled_music_ids = set()
     crawled_album_ids = set()
     crawled_artist_ids = set()
-    crawled_music_numbers = dict()
     fully_crawled_artist_ids = set()
 
     def update_crawler_detail():
-        crawler.detail = f'music {sum(crawled_music_numbers.values())}, album {len(crawled_album_ids)}, artist {len(crawled_artist_ids)}'
+        crawler.detail = f'music {len(crawled_music_ids)}, album {len(crawled_album_ids)}, artist {len(crawled_artist_ids)}'
 
     def update_crawler_elapsed():
         crawler.elapsed = time.time() - crawler.started.timestamp()
@@ -97,12 +97,52 @@ def crawl(crawler_id):
             return None
         return text
 
+    def crawl_music(music_id, album, stack, rating, artist_ids):
+        crawled_music_ids.add(music_id)
+        music = Album.objects.filter(original_id=music_id).first()
+        if music:
+            return music
+        stack.append(('music', music_id))
+
+        music_url = f'https://www.melon.com/song/detail.htm?songId={music_id}'
+        tree = get_tree(music_url)
+        music_title = tree.xpath("//div[@class='song_name']")[0].text_content().replace('곡명', '').strip()
+
+        # Gather Music Information
+        music_info = tree.xpath('/html/body/div[1]/div[3]/div/div/form/div/div/div[2]/div[2]/dl')[0]
+        info_keys = ('발매일', '장르')
+        info_key = None
+        info_fields = [None] * len(info_keys)
+        for elt in music_info.xpath('.//*'):
+            data = elt.text_content().strip()
+            if data in info_keys:
+                info_key = data
+            elif info_key is not None:
+                info_fields[info_keys.index(info_key)] = data
+                info_key = None
+
+        # Create Music
+        music = Music.objects.create(
+            original_id=music_id,
+            title=music_title,
+            album=album,
+            release=to_date(info_fields[0]),
+            genre=info_fields[1],
+            original_rating=rating,
+        )
+
+        # Crawl Artists
+        for artist_id in artist_ids:
+            artist = crawl_artist(artist_id, stack)
+            music.artists.add(artist)
+
+        stack.pop()
+        return music
+
     def crawl_album(album_id, stack):
         crawled_album_ids.add(album_id)
         album = Album.objects.filter(original_id=album_id).first()
         if album:
-            if album_id not in crawled_music_numbers:
-                crawled_music_numbers[album_id] = album.music.count()
             return album
         stack.append(('album', album_id))
         print(f'{"-"*len(stack)} Album {album_id}')
@@ -153,41 +193,35 @@ def crawl(crawler_id):
         for artist in artists:
             artist_ids.add(get_id_lxml(artist))
         for artist_id in artist_ids:
-            crawl_artist(artist_id, stack)
-            album.artists.add(Artist.objects.get(original_id=artist_id))
+            artist = crawl_artist(artist_id, stack)
+            album.artists.add(artist)
 
-        # Crawl Music
-        tree = get_tree(album_url)
-        musics = []
-        artist_ids = []
+        # Gather Music Ids
+        music_ids = set()
+        music_ratings = dict()
+        music_artist_ids = dict()
         for music_elt in tree.xpath('//form/div/table/tbody/tr[*]'):
-            try:
-                music_title = music_elt.xpath(".//a[contains(@href,'play.playSong')]")[0].text_content().strip()
-            except IndexError:
-                try:
-                    music_title = music_elt.xpath(".//span[@class='disabled']")[0].text_content().strip()
-                except IndexError:
-                    continue
+            music = music_elt.xpath(".//a[contains(@href,'goSongDetail')]")
+            if not music:
+                continue
+            music_id = get_id_lxml(music[0])
+            music_ids.add(music_id)
+
             rating = int(music_elt.xpath(".//button/span[@class='cnt']")[0].text_content().replace('총건수', '').strip())
+            music_ratings[music_id] = rating
 
-            music, _ = Music.objects.get_or_create(title=music_title, album=album, original_rating=rating)
-            musics.append(music)
-
-            # Gather Artist Ids
             artist_id_set = set()
-            for artist in tree.xpath(".//a[contains(@href,'goArtistDetail')]"):
+            for artist in music_elt.xpath(".//a[contains(@href,'goArtistDetail')]"):
                 artist_id_set.add(get_id_lxml(artist))
-            artist_ids.append(artist_id_set)
-        crawled_music_numbers[album_id] = len(musics)
-        print(f'............................. {len(musics)}')
+            if not artist_id_set:
+                artist = music_elt.xpath(".//div[@class='ellipsis rank02']")[0].text_content()
+                if 'Various Artists' not in artist:
+                    raise Exception(f"No artists on music {music_id}")
+            music_artist_ids[music_id] = artist_id_set
+        for music_id in music_ids:
+            crawl_music(music_id, album, stack, music_ratings[music_id], music_artist_ids[music_id])
 
-        # Crawl Artists
-        for i in range(len(musics)):
-            music = musics[i]
-            for artist_id in artist_ids[i]:
-                artist = crawl_artist(artist_id, stack)
-                music.artists.add(artist)
-
+        print(f'{"."*len(stack)} {album.music.count()}')
         stack.pop()
         return album
 
@@ -199,14 +233,13 @@ def crawl(crawler_id):
         simple = len(stack) > crawler.level
         if artist and simple:
             return artist
-        if not simple:
-            stack.append(('artist', artist_id))
+        stack.append(('artist', artist_id))
         print(f'{"-"*len(stack)} Artist {artist_id}')
 
         artist_url = f'https://www.melon.com/artist/album.htm?artistId={artist_id}'
         tree = get_tree(artist_url)
 
-        # Initial Creation
+        # First Creation
         if not artist:
             artist_name = tree.xpath("//p[@class='title_atist']")[0].text_content().replace('아티스트명', '').strip()
             print(f'{"="*len(stack)} {artist_name}')
@@ -266,6 +299,7 @@ def crawl(crawler_id):
 
         # Do not Crawl Heavily
         if simple:
+            stack.pop()
             return artist
 
         # Gather Album Ids

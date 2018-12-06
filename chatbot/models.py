@@ -62,9 +62,12 @@ class Album(models.Model):
 
 
 class Music(models.Model):
+    original_id = models.IntegerField()
     title = models.CharField(max_length=100)
     album = models.ForeignKey('chatbot.Album', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
+    genre = models.CharField(max_length=100, blank=True, null=True)
     artists = models.ManyToManyField(Artist, related_name='music')
+    release = models.DateField(blank=True, null=True)
     length = models.PositiveSmallIntegerField(blank=True, default=0)
     original_rating = models.PositiveIntegerField(default=0)
 
