@@ -46,12 +46,7 @@ class GroupArtist(Artist):
 
 
 def album_image_path(album, filename):
-    ext = os.path.splitext(filename)[1]
-    for default_ext in ('.jpg', '.png', '.jpeg', '.bmp'):
-        if default_ext in ext:
-            ext = default_ext
-            break
-    return os.path.join('album_image', f"{album.title.replace('/', '-')}{ext}")
+    return os.path.join('album_image', f"{album.title.replace('/', '-').replace(' ', '_')}.jpg")
 
 
 class Album(models.Model):
