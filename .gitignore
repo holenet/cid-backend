@@ -6,5 +6,6 @@ db.sqlite3
 *.pyc
 .idea
 server_key.txt
+postgres.config
 db.sqlite3-journal
 media/
