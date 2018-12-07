@@ -11,6 +11,7 @@ urlpatterns = [
     path('my-info/', views.MuserDetail.as_view()),
     path('chat/', views.Chat.as_view()),
     path('chat/<int:pk>/', views.ChatDetail.as_view()),
+    path('album-image/<int:album_id>/', views.album_image)
 ]
 
 urlpatterns += format_suffix_patterns(urlpatterns)
