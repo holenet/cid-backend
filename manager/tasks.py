@@ -17,6 +17,7 @@ from django.conf import settings
 from django.core.files import File
 from django.db.models import signals
 from django.dispatch import receiver
+from requests.exceptions import SSLError
 from selenium import webdriver
 from selenium.common.exceptions import StaleElementReferenceException
 
@@ -35,7 +36,15 @@ def crawl_help(sender, instance, created, **kwargs):
 
 
 def get_tree(url):
-    html = requests.get(url=url, headers=headers).text
+    html = None
+    for i in range(10):
+        try:
+            html = requests.get(url=url, headers=headers).text
+        except SSLError:
+            continue
+        break
+    if html is None:
+        html = requests.get(url=url, headers=headers).text
     return lxml.html.document_fromstring(html)
 
 
@@ -73,7 +82,7 @@ def to_date(text: None):
     return text
 
 
-def crawl_music(music_id, album_id, rating, artist_ids):
+def crawl_music(worker_id, music_id, album_id, rating, artist_ids):
     music_url = f'https://www.melon.com/song/detail.htm?songId={music_id}'
     tree = get_tree(music_url)
     music_title = tree.xpath("//div[@class='song_name']")[0].text_content().replace('곡명', '').strip()
@@ -82,7 +91,11 @@ def crawl_music(music_id, album_id, rating, artist_ids):
         music_title = music_title.replace(nineteen[0].text_content(), '').strip()
 
     # Gather Music Information
-    music_info = tree.xpath('/html/body/div[1]/div[3]/div/div/form/div/div/div[2]/div[2]/dl')[0]
+    music_info = tree.xpath('/html/body/div[1]/div[3]/div/div/form/div/div/div[2]/div[2]/dl')
+    if not music_info:
+        music_info = tree.xpath('/html/body/div[1]/div[3]/div/div/form/div/div[1]/div[2]/div/div[2]/dl')[0]
+    else:
+        music_info = music_info[0]
     info_keys = ('발매일', '장르')
     info_fields = get_info(music_info, info_keys)
 
@@ -98,11 +111,11 @@ def crawl_music(music_id, album_id, rating, artist_ids):
     return music_id, album_id, artist_ids
 
 
-def crawl_album(album_id):
+def crawl_album(worker_id, album_id):
     album_url = f'https://www.melon.com/album/detail.htm?albumId={album_id}'
     tree = get_tree(album_url)
     album_title = tree.xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[1]/div[1]')[0].text_content().replace('앨범명', '').strip()
-    print(f'Album {album_id} {album_title}')
+    print(f'{worker_id:02d} Album {album_id} {album_title}')
 
     # Gather Album Information
     album_info = tree.xpath('/html/body/div[1]/div[3]/div/div/div[2]/div/div[2]/div[2]/dl')[0]
@@ -150,7 +163,7 @@ def crawl_album(album_id):
         music_ratings[music_id] = rating
 
         artist_id_set = set()
-        for artist in music_elt.xpath(".//a[contains(@href,'goArtistDetail')]"):
+        for artist in music_elt.xpath(".//div[@class='ellipsis rank02']//a[contains(@href,'goArtistDetail')]"):
             artist_id_set.add(get_id_lxml(artist))
         if not artist_id_set:
             artist = music_elt.xpath(".//div[@class='ellipsis rank02']")[0].text_content()
@@ -161,7 +174,7 @@ def crawl_album(album_id):
     return album_id, artist_ids, music_ids, music_ratings, music_artist_ids
 
 
-def crawl_artist(artist_id, driver, simple):
+def crawl_artist(worker_id, artist_id, driver, simple):
     artist_url = f'https://www.melon.com/artist/song.htm?artistId={artist_id}'
     tree = get_tree(artist_url)
 
@@ -169,10 +182,11 @@ def crawl_artist(artist_id, driver, simple):
     artist = Artist.objects.filter(original_id=artist_id).first()
     member_ids = set()
     if artist:
-        print(f'Artist {artist_id} {artist.name}')
+        if not simple:
+            print(f'{worker_id:02d} Artist {artist_id} {artist.name}')
     else:
         artist_name = tree.xpath("//p[@class='title_atist']")[0].text_content().replace('아티스트명', '').strip()
-        print(f'Artist {artist_id} {artist_name}')
+        print(f'{worker_id:02d} Artist {artist_id} {artist_name}')
 
         # Gather Artist Information
         artist_info = tree.xpath("//dl[@class='atist_info clfix']")[0]
@@ -247,6 +261,12 @@ def crawl(crawler_id):
     crawler.progress = 0
     crawler.save()
 
+    crawling_thread_num = crawler.thread
+    relating_thread_num = crawler.thread
+    whole_task = 10 / crawling_thread_num + 1 / relating_thread_num
+    crawling_ratio = 10 / crawling_thread_num / whole_task
+    relating_ratio = 1 / relating_thread_num / whole_task
+
     options = webdriver.ChromeOptions()
     options.add_argument('headless')
     options.add_argument('window-size=1920x1080')
@@ -255,11 +275,11 @@ def crawl(crawler_id):
 
     urls = (
         'https://www.melon.com/genre/song_list.htm?gnrCode=GN0900&steadyYn=Y',
-        # 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1000&steadyYn=Y',
-        # 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1100&steadyYn=Y',
-        # 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1200&steadyYn=Y',
-        # 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1300&steadyYn=Y',
-        # 'https://www.melon.com/genre/song_list.htm?gnrCode=GN1400&steadyYn=Y',
+        'https://www.melon.com/genre/song_list.htm?gnrCode=GN1000&steadyYn=Y',
+        'https://www.melon.com/genre/song_list.htm?gnrCode=GN1100&steadyYn=Y',
+        'https://www.melon.com/genre/song_list.htm?gnrCode=GN1200&steadyYn=Y',
+        'https://www.melon.com/genre/song_list.htm?gnrCode=GN1300&steadyYn=Y',
+        'https://www.melon.com/genre/song_list.htm?gnrCode=GN1400&steadyYn=Y',
     )
 
     crawled_ids = {'music': set(), 'album': set(), 'artist': set()}
@@ -313,18 +333,18 @@ def crawl(crawler_id):
                 # Run Work Items
                 to_do_ids = {'music': set(), 'album': set(), 'artist': set()}
                 if crawl_type == 'music':
-                    music_id, album_id, artist_ids = crawl_music(crawl_id, **kwargs)
+                    music_id, album_id, artist_ids = crawl_music(worker_id, crawl_id, **kwargs)
                     relations['music'][music_id] = (album_id, artist_ids)
                     to_do_ids['album'] = [(album_id, {})]
                     to_do_ids['artist'] = emtpy_kwarg_list(artist_ids)
                 elif crawl_type == 'album':
-                    album_id, artist_ids, music_ids, music_ratings, music_artist_ids = crawl_album(crawl_id)
+                    album_id, artist_ids, music_ids, music_ratings, music_artist_ids = crawl_album(worker_id, crawl_id)
                     if artist_ids:
                         relations['album'][album_id] = artist_ids
                     to_do_ids['artist'] = emtpy_kwarg_list(artist_ids)
                     to_do_ids['music'] = [(music_id, {'album_id': album_id, 'rating': music_ratings[music_id], 'artist_ids': music_artist_ids[music_id]}) for music_id in music_ids]
                 elif crawl_type == 'artist':
-                    artist_id, album_ids, member_ids = crawl_artist(crawl_id, driver, depth > max_depth)
+                    artist_id, album_ids, member_ids = crawl_artist(worker_id, crawl_id, driver, depth > max_depth)
                     if member_ids:
                         relations['artist'][artist_id] = member_ids
                     to_do_ids['album'] = emtpy_kwarg_list(album_ids)
@@ -348,7 +368,7 @@ def crawl(crawler_id):
 
     # Spawn Worker Threads
     workers = []
-    for i in range(crawler.thread):
+    for i in range(crawling_thread_num):
         t = threading.Thread(target=worker, args=(i + 1,))
         workers.append(t)
         t.daemon = True
@@ -385,7 +405,7 @@ def crawl(crawler_id):
             return
 
         # Update Progress
-        progress = i / len(artist_ids) / 2
+        progress = crawling_ratio * i / len(artist_ids)
         crawler.status = 'Crawling'
         crawler.progress = 100 * progress
         current_time = time.time()
@@ -429,7 +449,7 @@ def crawl(crawler_id):
             chunk = queue.get()
             if chunk is None:
                 break
-            print(f'{chunk[0][0]} {len(chunk)}')
+            print(f'{chunk[0][0]} {chunk[0][1]}...{len(chunk)}')
             for model_type, model_id, arg1, arg2 in chunk:
                 try:
                     if model_type == 'music':
@@ -460,7 +480,7 @@ def crawl(crawler_id):
 
     # Spawn Worker Threads
     workers = []
-    for i in range(1):
+    for i in range(relating_thread_num):
         t = threading.Thread(target=worker, args=(i + 1,))
         workers.append(t)
         t.daemon = True
@@ -513,12 +533,12 @@ def crawl(crawler_id):
             return
 
         # Update Progress
-        progress = 0.5 + (total - queue.unfinished_tasks) / total / 2
+        progress = crawling_ratio + relating_ratio * (total - queue.unfinished_tasks) / total
         crawler.status = 'Relating'
         crawler.progress = 100 * progress
         current_time = time.time()
-        if progress - 0.5 != 0:
-            crawler.remain = (current_time - last_time) / (progress - 0.5) * (1 - progress)
+        if progress - crawling_ratio != 0:
+            crawler.remain = (current_time - last_time) / (progress - crawling_ratio) * (1 - progress)
         update_crawler()
 
         for _ in range(10):

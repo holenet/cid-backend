@@ -22,9 +22,9 @@ class Muser(auth_models.User):
 
 class Artist(models.Model):
     original_id = models.IntegerField()
-    name = models.CharField(max_length=100, blank=True, default='')
+    name = models.CharField(max_length=255, blank=True, default='')
     debut = models.DateField(blank=True, null=True)
-    agent = models.CharField(max_length=100, blank=True, null=True)
+    agent = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -51,11 +51,11 @@ def album_image_path(album, filename):
 
 class Album(models.Model):
     original_id = models.IntegerField()
-    title = models.CharField(max_length=100, blank=True)
-    genre = models.CharField(max_length=100, blank=True, null=True)
+    title = models.CharField(max_length=500, blank=True)
+    genre = models.CharField(max_length=255, blank=True, null=True)
     artists = models.ManyToManyField(Artist, related_name='albums')
     release = models.DateField(blank=True, null=True)
-    image = models.ImageField(null=True, upload_to=album_image_path)
+    image = models.ImageField(null=True, upload_to=album_image_path, max_length=500)
 
     def __str__(self):
         return self.title
@@ -63,9 +63,9 @@ class Album(models.Model):
 
 class Music(models.Model):
     original_id = models.IntegerField()
-    title = models.CharField(max_length=100)
+    title = models.CharField(max_length=500)
     album = models.ForeignKey('chatbot.Album', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
-    genre = models.CharField(max_length=100, blank=True, null=True)
+    genre = models.CharField(max_length=255, blank=True, null=True)
     artists = models.ManyToManyField(Artist, related_name='music')
     release = models.DateField(blank=True, null=True)
     length = models.PositiveSmallIntegerField(blank=True, default=0)
@@ -90,7 +90,7 @@ class Message(models.Model):
     receiver = models.ForeignKey('chatbot.Muser', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
     text = models.TextField(blank=True)
     music = models.ForeignKey('chatbot.Music', on_delete=models.CASCADE, blank=True, null=True)
-    chips = models.CharField(validators=[int_list_validator], max_length=100, default=[])
+    chips = models.CharField(validators=[int_list_validator], max_length=255, default=[])
 
     def __str__(self):
         if not self.sender:

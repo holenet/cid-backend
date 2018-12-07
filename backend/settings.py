@@ -94,10 +94,17 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/2.1/ref/settings/#databases
 
+with open('postgres.config') as f:
+    postgres_user = f.readline().strip()
+    postgres_password = f.readline().strip()
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'cid_backend',
+        'USER': postgres_user,
+        'PASSWORD': postgres_password,
+        'HOST': 'localhost',
+        'PORT': '',
     }
 }
 
