@@ -6,7 +6,7 @@ import requests
 from fcm_django.models import FCMDevice
 
 from backend.celery import app
-from chatbot.models import Message, Muser
+from chatbot.models import Message, Muser, Music
 
 
 def chatscript(username, text):
@@ -27,14 +27,16 @@ def greet(user_id):
 
 
 @app.task
-def respond(user_id, text):
-    print(f'respond {user_id}')
-    from random import sample
-
+def respond(user_id, user_text):
     user = Muser.objects.get(pk=user_id)
-    text = chatscript(user.username, text)
-    chips = sample(range(0, 20), 4)
-    message = Message.objects.create(receiver=user, text=text, chips=chips)
+    text = chatscript(user.username, user_text)
+    if 'recommend' in user_text:
+        from random import randint
+        music = Music.objects.all()[randint(0, Music.objects.count() - 1)]
+        chips = [1, 2, 4]
+        message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
+    else:
+        message = Message.objects.create(receiver=user, text=text)
 
     device = FCMDevice.objects.filter(user=user).first()
     if device:

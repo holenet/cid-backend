@@ -1,5 +1,4 @@
-import pyfcm
-from django.conf import settings
+import os
 
 from django.core.validators import int_list_validator
 from django.db import models
@@ -14,14 +13,18 @@ class Muser(auth_models.User):
 
     push_token = models.CharField(max_length=200, blank=True, null=True)
 
+    class Meta:
+        verbose_name = 'Muser'
+
     def __str__(self):
         return self.username
 
 
 class Artist(models.Model):
-    name = models.CharField(max_length=100, blank=True, default='')
+    original_id = models.IntegerField()
+    name = models.CharField(max_length=255, blank=True, default='')
     debut = models.DateField(blank=True, null=True)
-    agent = models.CharField(max_length=100, blank=True, default='')
+    agent = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -36,27 +39,37 @@ class SoloArtist(Artist):
 
 
 class GroupArtist(Artist):
-    members = models.ManyToManyField(SoloArtist)
+    members = models.ManyToManyField(Artist, related_name='group_set')
 
     def __str__(self):
         return self.name
 
 
+def album_image_path(album, filename):
+    return os.path.join('album_image', f"{album.title.replace('/', '-').replace(' ', '_')}.jpg")
+
+
 class Album(models.Model):
-    title = models.CharField(max_length=100, blank=True, default='')
-    artists = models.ManyToManyField(Artist)
+    original_id = models.IntegerField()
+    title = models.CharField(max_length=500, blank=True)
+    genre = models.CharField(max_length=255, blank=True, null=True)
+    artists = models.ManyToManyField(Artist, related_name='albums')
     release = models.DateField(blank=True, null=True)
+    image = models.ImageField(null=True, upload_to=album_image_path, max_length=500)
 
     def __str__(self):
         return self.title
 
 
 class Music(models.Model):
-    title = models.CharField(max_length=100)
+    original_id = models.IntegerField()
+    title = models.CharField(max_length=500)
     album = models.ForeignKey('chatbot.Album', related_name='music', on_delete=models.CASCADE, blank=True, null=True)
-    artists = models.ManyToManyField(Artist)
-    genre = models.CharField(max_length=100, blank=True, default='')
+    genre = models.CharField(max_length=255, blank=True, null=True)
+    artists = models.ManyToManyField(Artist, related_name='music')
+    release = models.DateField(blank=True, null=True)
     length = models.PositiveSmallIntegerField(blank=True, default=0)
+    original_rating = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.title
@@ -77,7 +90,7 @@ class Message(models.Model):
     receiver = models.ForeignKey('chatbot.Muser', related_name='received_messages', on_delete=models.CASCADE, blank=True, null=True)
     text = models.TextField(blank=True)
     music = models.ForeignKey('chatbot.Music', on_delete=models.CASCADE, blank=True, null=True)
-    chips = models.CharField(validators=[int_list_validator], max_length=20, blank=True, null=True)
+    chips = models.CharField(validators=[int_list_validator], max_length=255, default=[])
 
     def __str__(self):
         if not self.sender:

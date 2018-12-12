@@ -1,8 +1,11 @@
 venv
 chatbot/migrations
+/manager/migrations/
 db.sqlite3
 *.swp
 *.pyc
 .idea
 server_key.txt
-
+postgres.config
+db.sqlite3-journal
+media/
