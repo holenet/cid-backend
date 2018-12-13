@@ -4,10 +4,10 @@ import socket
 
 import requests
 from fcm_django.models import FCMDevice
-from numpy.random import choice
 
 from backend.celery import app
-from chatbot.models import Message, Muser, Music
+from chatbot.models import Message, Muser
+from chatbot.recommend import recommend
 
 
 def chatscript(username, text):
@@ -64,19 +64,3 @@ def send_push(device_id, message_id):
             print(e)
         else:
             break
-
-
-def recommend(user, opt):
-    candidates = Music.objects.all()
-    if 'genre' in opt:
-        candidates = candidates.filter(genre__icontains=opt['genre'])
-    if 'artist' in opt:
-        candidates = candidates.filter(artists__name__icontains=opt['genre'])
-    if not candidates:
-        return None
-    candidates = list(candidates)
-    ratings = list(map(lambda x: x.original_rating, candidates))
-    total_ratings = sum(ratings)
-    weights = list(map(lambda x: x / total_ratings, ratings))
-    music = choice(candidates, p=weights)
-    return music
