@@ -6,7 +6,8 @@ import requests
 from fcm_django.models import FCMDevice
 
 from backend.celery import app
-from chatbot.models import Message, Muser, Music
+from chatbot.models import Message, Muser
+from chatbot.recommend import recommend
 
 
 def chatscript(username, text):
@@ -32,26 +33,23 @@ def respond(user_id, user_text):
     text = chatscript(user.username, user_text)
     message = None
     if '@@' in text:
-        command, args = text.split(':')
+        command, opt = text.split('@@')[1].split(':')
         command = command.strip().lower()
-        args = 'dict(' + args.strip()[1:-1] + ')'
+        opt = 'dict(' + opt.strip()[1:-1] + ')'
         if command == 'recommend':
-            music = recommend(*eval(args))
-            chips = [1, 2, 4]
-            message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
+            music = recommend(user, eval(opt))
+            if music is None:
+                text = 'Sorry, I cannot find such music.'
+                message = Message.objects.create(receiver=user, text=text)
+            else:
+                chips = [1, 2]
+                message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
 
     if message is None:
         message = Message.objects.create(receiver=user, text=text)
 
     for device in FCMDevice.objects.filter(user=user):
         send_push.delay(device.id, message.id)
-
-
-def recommend(genre, artist):
-    print(genre, artist)
-    from random import randint
-    music = Music.objects.all()[randint(0, Music.objects.count() - 1)]
-    return music
 
 
 @app.task
