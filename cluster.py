@@ -18,7 +18,7 @@ import itertools
 import collections
 
 
-class Muser:
+class DbgMuser:
 	def __init__(self, _id, _gender, _birthdate):
 		self.id = _id
 		self.gender = _gender
@@ -41,7 +41,7 @@ class Muser:
 				self.artists.append(a)
 
 
-class Music:
+class DbgMusic:
 	def __init__(self, _id, _title, _album, _genre, _artists, _release, _length, _rating):
 		self.id = _id
 		self.title = _title
@@ -53,7 +53,7 @@ class Music:
 		self.rating = _rating
 
 
-class Evaluation:
+class DbgEvaluation:
 	def __init__(self, _user, _music, _rating):
 		self.user = _user
 		self.music = _music
@@ -65,7 +65,7 @@ def construct_random_insts(num_muser, num_music, num_eval):
 	music = []
 	evals = []
 	for i in range(num_muser):
-		new_user = Muser(_id=i, _gender=random.randint(1,3), _birthdate=datetime.datetime.now())
+		new_user = DbgMuser(_id=i, _gender=random.randint(1,3), _birthdate=datetime.datetime.now())
 		users.append(new_user)
 
 	for i in range(num_music):
@@ -77,14 +77,14 @@ def construct_random_insts(num_muser, num_music, num_eval):
 			artist = random.randint(1, 500) # assume 500 artists
 			artists.append(artist)
 
-		new_music = Music(_id=i,
-				          _title="music"+str(i),
-						  _album="album"+str(i), 
-						  _genre=random.randint(1,8),
-						  _artists=artists,
-						  _release=datetime.datetime.now(),
-						  _length=random.randint(0, 10),
-						  _rating=random.randint(0, 5))
+		new_music = DbgMusic(_id=i,
+						     _title="music"+str(i),
+						     _album="album"+str(i), 
+						     _genre=random.randint(1,8),
+						     _artists=artists,
+						     _release=datetime.datetime.now(),
+						     _length=random.randint(0, 10),
+						     _rating=random.randint(0, 5))
 		
 		music.append(new_music)
 
@@ -107,7 +107,7 @@ def construct_random_insts(num_muser, num_music, num_eval):
 			rating = 5
 
 		if rating != 0:
-			new_eval = Evaluation(_user=u, _music=m, _rating=rating)
+			new_eval = DbgEvaluation(_user=u, _music=m, _rating=rating)
 			evals.append(new_eval)
 	
 	return users, music, evals
