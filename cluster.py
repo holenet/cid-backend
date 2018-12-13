@@ -189,9 +189,9 @@ def sample(listt, num):
   TODO: parrallelize
 """
 def h_cluster(clusters, dim, depth):
-	print(f'depth: {depth}')
-	for cluster in clusters:
-	  print([p.user_id for p in cluster.elts])
+	# print(f'depth: {depth}')
+	# for cluster in clusters:
+	#	 print([p.user_id for p in cluster.elts])
 
 	if depth == 0:
 		return clusters
@@ -277,8 +277,10 @@ def cluster():
 	num_music = 10000
 	num_evals = 5000
 
+	# Construct random users, music and evaluations.
 	users, music, evals = construct_random_insts(num_users, num_music, num_evals)
 
+	# Let each user be a point.
 	points = []
 	for u in users:
 		pos = {}
@@ -290,20 +292,25 @@ def cluster():
 			new_point = Point(u.id, pos)
 			points.append(new_point)
 
+	# At first, each point is a cluster by itself.
 	clusters = []
 	for p in points:
 		new_cluster = Cluster([p], p.pos)
 		clusters.append(new_cluster)
 
+	# Step 1: Randomly select n points.
 	sample_size = int(0.3 * len(clusters))
-	samples = sample(clusters, sample_size)
+	selected = sample(clusters, sample_size)
 
-	samples = h_cluster(samples, num_music, 2)
+	# Step 2: Hierarchically cluster selected points.
+	selected = h_cluster(selected, num_music, 2)
 
-	for cluster in samples:
+	for cluster in selected:
+		# Step 3: select representative points for each cluster
 		reps = get_representatives(cluster, num_music)
+		
+		# Step 4: move each rep 20% towards the centroid
 		for r in reps:
 			r.move(0.2, cluster.pos)
-
 
 cluster()
