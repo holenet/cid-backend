@@ -9,12 +9,14 @@ DEBUG = True
 	5. Each user likes at most 100 artists.
 """
 
-if DEBUG:
-	import random
-	import datetime
-	from scipy import spatial
-else:
-	pass
+import random
+import datetime
+from scipy import spatial
+import math
+import copy
+import itertools
+import collections
+
 
 class Muser:
 	def __init__(self, _id, _gender, _birthdate):
@@ -110,12 +112,33 @@ def construct_random_insts(num_muser, num_music, num_eval):
 	
 	return users, music, evals
 
+class Point:
+	def __init__(self, _user_id, _pos):
+		self.user_id = _user_id
+		self.pos = _pos
+	
+	def move(self, a, _pos):
+		merged = collections.defaultdict(list)
+		for k, v in itertools.chain(self.pos.items(), _pos.items()):
+			merged[k].append(v)
+
+		new_pos = {}
+		for k, v in merged.items():
+			if len(v) == 2:
+				new_pos[k] = (1-a)*v[0] + a*v[1]
+			else:
+				new_pos[k] = (1-a)*v[0]
+
+		self.pos = new_pos
+
 
 class Cluster:
 	def __init__(self, _elts, _pos):
 		self.elts = _elts
 		self.pos = _pos
-
+"""
+  given two clusters, merge them
+"""
 def merge(c1, c2):
 	p1 = c1.pos
 	p2 = c2.pos
@@ -132,6 +155,9 @@ def merge(c1, c2):
 	
 	return Cluster(c1.elts + c2.elts, pos)
 
+"""
+  given two clusters (and dimension), return cosine distance between them.
+"""
 def cos_distance(c1, c2, dim):
 	p1 = c1.pos
 	p2 = c2.pos
@@ -151,7 +177,7 @@ def cos_distance(c1, c2, dim):
 
 """
   Naive sampling implementation O(N + K log(K))
-  TODO: update
+  TODO: delveop faster algorithm
 """
 def sample(listt, num):
 	indices = random.sample(range(len(listt)), num)
@@ -163,9 +189,9 @@ def sample(listt, num):
   TODO: parrallelize
 """
 def h_cluster(clusters, dim, depth):
-	#print(f'depth: {depth}')
-	#for cluster in clusters:
-	#  print(cluster.elts)
+	print(f'depth: {depth}')
+	for cluster in clusters:
+	  print([p.user_id for p in cluster.elts])
 
 	if depth == 0:
 		return clusters
@@ -202,48 +228,82 @@ def h_cluster(clusters, dim, depth):
 	return h_cluster(new_clusters, dim, depth-1)
 
 
+def get_representatives(cluster, dim):
+	elts = cluster.elts
+	num_elt = len(elts)
+	num_rep = int(math.ceil(0.5 * num_elt))
+
+	reps = [0]
+	
+	dist = [[0.0] * num_elt for _ in range(num_elt)]
+	for i in range(num_elt):
+		for j in range(num_elt):
+			dist[i][j] = cos_distance(elts[i], elts[j], dim)
+	
+			
+	for _ in range(num_rep-1):
+		d = []
+		for i in range(num_elt):
+			if i in reps:
+				d.append(0.0)
+			else:
+				acc = 0.0
+				for r in reps:
+					acc += dist[i][r]
+				d.append(acc)
+
+		reps.append(d.index(max(d)))
+
+	reps = [elts[r] for r in reps]
+	reps = [Point(-1, copy.deepcopy(r.pos)) for r in reps]
+
+	return reps
+
+
+
 """
   CURE Clustring implementation
   TODO: parallelize
 
   1. Randomly select n points.
   2. Hierarchically cluster those chosen points.
-  --
   3. For each cluster, select k representative points.
   4. For each cluster, move chosen representative points 20% closer to its centroid.
+--
   5. Assign all points to clusters that contains representative closest to the point.
 """
 def cluster():
-	global DEBUG
-	if (DEBUG):
-		num_users = 100
-		num_music = 10000
-		num_evals = 5000
+	num_users = 100
+	num_music = 10000
+	num_evals = 5000
 
-		users, music, evals = construct_random_insts(num_users, num_music, num_evals)
-		#for i in range(len(evals)):
-		#	print(f'eval {i}: (user{evals[i].user.id, evals[i].music.id, evals[i].rating})')
+	users, music, evals = construct_random_insts(num_users, num_music, num_evals)
 
-		clusters = []
-		for u in users:
-			# pos is a dict of 'axis -> value' where each music is an axis and the value is its rating.
-			pos = {}
-			for e in evals:
-				if e.user is u:
-					pos[e.music.id] = e.rating
+	points = []
+	for u in users:
+		pos = {}
+		for e in evals:
+			if e.user is u:
+				pos[e.music.id] = e.rating
 
-			if len(pos) > 0:
-				new_cluster = Cluster([u.id], pos)
-				clusters.append(new_cluster)
+		if len(pos) > 0:
+			new_point = Point(u.id, pos)
+			points.append(new_point)
 
-	else:
-		users = Muser.objects.all()
-		music = Music.objects.all()
-		evals = Evaluation.objects.all()
+	clusters = []
+	for p in points:
+		new_cluster = Cluster([p], p.pos)
+		clusters.append(new_cluster)
 
-	sample_size = int(0.1 * len(clusters))
+	sample_size = int(0.3 * len(clusters))
 	samples = sample(clusters, sample_size)
 
-	samples = h_cluster(samples, num_music, 3)
+	samples = h_cluster(samples, num_music, 2)
+
+	for cluster in samples:
+		reps = get_representatives(cluster, num_music)
+		for r in reps:
+			r.move(0.2, cluster.pos)
+
 
 cluster()
