@@ -1,10 +1,13 @@
-import random
-import datetime
-from scipy import spatial
-import math
-import copy
-import itertools
 import collections
+import copy
+import datetime
+import itertools
+import math
+import random
+from scipy import spatial
+
+from django.core.management.base import BaseCommand
+from chatbot.models import *
 
 DEBUG = True
 """
@@ -16,12 +19,13 @@ DEBUG = True
     5. Each user likes at most 100 artists.
 """
 
+genres = {}
+artist_pk_bound = {}
 
 class DbgMuser:
-    def __init__(self, pk, gender, birthdate):
+    def __init__(self, pk, uid):
         self.id = pk
-        self.gender = gender
-        self.birthdate = birthdate
+        self.uid = uid
 
         # below two attrs are user's taste
         self.genre = []
@@ -29,26 +33,22 @@ class DbgMuser:
 
         num_genre = random.randint(0, 3)
         for _ in range(num_genre):
-            g = random.randint(1, 8)
+            g = random.randint(0, len(genres))
             if g not in self.genre:
                 self.genre.append(g)
 
         num_artists = random.randint(0, 100)
         for _ in range(num_artists):
-            a = random.randint(1, 500)
+            a = random.randint(artist_pk_bound['lo'], artist_pk_bound['hi'])
             if a not in self.artists:
                 self.artists.append(a)
 
 class DbgMusic:
-    def __init__(self, pk, title, album, genre, artists, release, length, rating):
+    def __init__(self, pk, mid, genre, artists):
         self.id = pk
-        self.title = title
-        self.album = album
+        self.mid = mid
         self.genre = genre
         self.artists = artists
-        self.release = release
-        self.length = length
-        self.rating = rating
 
 
 class DbgEvaluation:
@@ -62,49 +62,49 @@ def construct_random_insts(num_muser, num_music, num_eval):
     users = []
     music = []
     evals = []
+
     for i in range(num_muser):
-        new_user = DbgMuser(pk=i, gender=random.randint(1, 3), birthdate=datetime.datetime.now())
+        try:
+            m = Muser.objects.get(username=f'dummy{i}')
+            m.delete()
+        except Exception as e:
+            pass
+        m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
+        new_user = DbgMuser(pk=i, uid=m.id)
         users.append(new_user)
-
-    for i in range(num_music):
-        genre = random.randint(1, 8)  # assume 8 genre
-
-        artists = []
-        num_artists = random.randint(1, 5)
-        for j in range(num_artists):
-            artist = random.randint(1, 500)  # assume 500 artists
-            artists.append(artist)
-
-        new_music = DbgMusic(pk=i,
-                          title="music" + str(i),
-                          album="album" + str(i),
-                          genre=genre,
-                          artists=artists,
-                          release=datetime.datetime.now(),
-                          length=random.randint(0, 10),
-                          rating=random.randint(0, 5))
-
+    
+    pk = 0
+    for m in Music.objects.all():
+        new_music = DbgMusic(pk=pk,
+                             mid = m.id,
+                             genre=m.genre,
+                             artists=[a.id for a in m.artists.all()])
+    
         music.append(new_music)
+        pk += 1
+        if pk > num_music: break # for debug
 
-    for i in range(num_eval):
-        uid = random.randint(0, num_muser - 1)
-        mid = random.randint(0, num_music - 1)
+    for u in users:
+        bias = random.randint(-2, 2)
+        for _ in range(num_eval + bias):
+            mid = random.randint(0, num_music - 1)
+            m = music[mid]
+            rating = 0
 
-        u = users[uid]
-        m = music[mid]
-        rating = 0
+            if m.genre in u.genre:
+                rating += 3
 
-        if m.genre in u.genre:
-            rating += 3
+            for a in m.artists:
+                if a in u.artists:
+                    rating += 1
 
-        for a in m.artists:
-            if a in u.artists:
-                rating += 1
+            if 5 < rating:
+                rating = 5
 
-        if 5 < rating:
-            rating = 5
+            Evaluation.objects.create(user=Muser.objects.get(id=u.uid),
+                                      music=Music.objects.get(id=m.mid),
+                                      rating=rating)
 
-        if rating != 0:
             new_eval = DbgEvaluation(user=u, music=m, rating=rating)
             evals.append(new_eval)
 
@@ -190,9 +190,9 @@ def h_cluster(clusters, dim, depth):
       Hierarchical clustering implementation
     """
 
-    # print(f'depth: {depth}')
-    # for cluster in clusters:
-    #     print([p.user_id for p in cluster.elts])
+    print(f'depth: {depth}')
+    for cluster in clusters:
+        print([p.user_id for p in cluster.elts])
 
     if depth == 0:
         return clusters
@@ -205,13 +205,13 @@ def h_cluster(clusters, dim, depth):
         dists = []
         for c in clusters:
             if c is cluster:
-                dists.append(9.9)
+                dists.append(9999999999999999999)
             else:
                 dist = cos_distance(cluster.pos, c.pos, dim)
                 dists.append(dist)
 
         neighbor = cluster
-        min_dist = 9.9
+        min_dist = 99999999999999999
         for i in range(len(dists)):
             if dists[i] < min_dist and clusters[i] not in merged_clusters:
                 neighbor = clusters[i]
@@ -271,9 +271,9 @@ def run_clustering():
       4. For each cluster, move chosen representative points 20% closer to its centroid.
       5. Assign all points to clusters that contains representative closest to the point.
     """
-    num_users = 100
-    num_music = 10000
-    num_evals = 5000
+    num_users = 1000
+    num_music = 1000 #Music.objects.count()
+    num_evals = 50 # average number of eval per dummy
 
     # Construct random users, music and evaluations.
     users, music, evals = construct_random_insts(num_users, num_music, num_evals)
@@ -301,7 +301,7 @@ def run_clustering():
     selected = sample(clusters, sample_size)
 
     # Step 2: Hierarchically cluster selected points.
-    selected = h_cluster(selected, num_music, 2)
+    selected = h_cluster(selected, num_music, 10)
 
     cluster_id = 0
     whole_reps = {}
@@ -335,8 +335,28 @@ def run_clustering():
         result[closest].append(p.user_id)
 
     for k, v in result.items():
-        print(f'cluster {k}: {v}')
+        print(f'cluster {k}: {sorted(v)}')
+
+    for k, v in result.items():
+        for u in v:
+            user_instance = Muser.objects.get(id=users[u].uid)
+            user_instance.cluster = k
+            user_instance.save()
 
 
-if __name__ == '__main__':
-    run_clustering()
+class Command(BaseCommand):
+    def handle(self, *args, **kwargs):
+        idx = 0
+        for music in Music.objects.all():
+            for genre in music.genre.split('/'):
+                for genre2 in genre.strip().split(','):
+                    if genre2 not in genres:
+                        genres[genre2] = idx
+                        idx += 1
+
+        artist_pks = [a.id for a in Artist.objects.all()]
+        artist_pk_bound['lo'] = min(artist_pks)
+        artist_pk_bound['hi'] = max(artist_pks)
+        
+        run_clustering()
+
