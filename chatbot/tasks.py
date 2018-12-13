@@ -38,13 +38,19 @@ def respond(user_id, user_text):
     else:
         message = Message.objects.create(receiver=user, text=text)
 
-    device = FCMDevice.objects.filter(user=user).first()
-    if device:
-        retry = 10
-        for _ in range(retry):
-            try:
-                device.send_message(data={'message_id': message.id, 'text': text})
-            except requests.exceptions.ReadTimeout as e:
-                print(e)
-            else:
-                break
+    for device in FCMDevice.objects.filter(user=user):
+        send_push.delay(device.id, message.id)
+
+
+@app.task
+def send_push(device_id, message_id):
+    device = FCMDevice.objects.get(pk=device_id)
+    message = Message.objects.get(pk=message_id)
+    retry = 10
+    for _ in range(retry):
+        try:
+            device.send_message(data={'message_id': message.id, 'text': message.text})
+        except requests.exceptions.ReadTimeout as e:
+            print(e)
+        else:
+            break
