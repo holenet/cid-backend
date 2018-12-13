@@ -4,6 +4,7 @@ import socket
 
 import requests
 from fcm_django.models import FCMDevice
+from numpy.random import choice
 
 from backend.celery import app
 from chatbot.models import Message, Muser, Music
@@ -32,26 +33,23 @@ def respond(user_id, user_text):
     text = chatscript(user.username, user_text)
     message = None
     if '@@' in text:
-        command, args = text.split(':')
+        command, opt = text.split('@@')[1].split(':')
         command = command.strip().lower()
-        args = 'dict(' + args.strip()[1:-1] + ')'
+        opt = 'dict(' + opt.strip()[1:-1] + ')'
         if command == 'recommend':
-            music = recommend(*eval(args))
-            chips = [1, 2, 4]
-            message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
+            music = recommend(user, eval(opt))
+            if music is None:
+                text = 'Sorry, I cannot find such music.'
+                message = Message.objects.create(receiver=user, text=text)
+            else:
+                chips = [1, 2]
+                message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
 
     if message is None:
         message = Message.objects.create(receiver=user, text=text)
 
     for device in FCMDevice.objects.filter(user=user):
         send_push.delay(device.id, message.id)
-
-
-def recommend(genre, artist):
-    print(genre, artist)
-    from random import randint
-    music = Music.objects.all()[randint(0, Music.objects.count() - 1)]
-    return music
 
 
 @app.task
@@ -66,3 +64,19 @@ def send_push(device_id, message_id):
             print(e)
         else:
             break
+
+
+def recommend(user, opt):
+    candidates = Music.objects.all()
+    if 'genre' in opt:
+        candidates = candidates.filter(genre__icontains=opt['genre'])
+    if 'artist' in opt:
+        candidates = candidates.filter(artists__name__icontains=opt['genre'])
+    if not candidates:
+        return None
+    candidates = list(candidates)
+    ratings = list(map(lambda x: x.original_rating, candidates))
+    total_ratings = sum(ratings)
+    weights = list(map(lambda x: x / total_ratings, ratings))
+    music = choice(candidates, p=weights)
+    return music
