@@ -1,6 +1,9 @@
+import mimetypes
+
 from django.contrib.auth import authenticate, password_validation
 from django.core import exceptions
 from django.db.utils import IntegrityError
+from django.http import HttpResponse
 from fcm_django.models import FCMDevice
 
 from rest_framework import generics
@@ -10,7 +13,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_200_OK
 
-from chatbot.models import Muser, Message
+from chatbot.models import Muser, Message, Album
 from chatbot.serializers import MuserSerializer, MessageSerializer
 from chatbot.tasks import respond, greet
 
@@ -152,3 +155,16 @@ class ChatDetail(generics.RetrieveAPIView):
     def get_queryset(self):
         user = self.request.user
         return Message.objects.filter(sender=user) | Message.objects.filter(receiver=user)
+
+
+@api_view(['GET'])
+@permission_classes((AllowAny,))
+def album_image(request, album_id):
+    try:
+        album = Album.objects.get(id=album_id)
+    except Album.DoesNotExist:
+        return Response({'detail': 'The album does not exist'}, status=HTTP_404_NOT_FOUND)
+    with open(album.image.path, 'rb') as f:
+        response = HttpResponse(f, content_type=mimetypes.guess_type(album.image.path))
+        response['Content-Disposition'] = f'attachment; filename={album.image.name}'
+        return response
