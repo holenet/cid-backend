@@ -30,16 +30,28 @@ def greet(user_id):
 def respond(user_id, user_text):
     user = Muser.objects.get(pk=user_id)
     text = chatscript(user.username, user_text)
-    if 'recommend' in user_text:
-        from random import randint
-        music = Music.objects.all()[randint(0, Music.objects.count() - 1)]
-        chips = [1, 2, 4]
-        message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
-    else:
+    message = None
+    if '@@' in text:
+        command, args = text.split(':')
+        command = command.strip().lower()
+        args = 'dict(' + args.strip()[1:-1] + ')'
+        if command == 'recommend':
+            music = recommend(*eval(args))
+            chips = [1, 2, 4]
+            message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
+
+    if message is None:
         message = Message.objects.create(receiver=user, text=text)
 
     for device in FCMDevice.objects.filter(user=user):
         send_push.delay(device.id, message.id)
+
+
+def recommend(genre, artist):
+    print(genre, artist)
+    from random import randint
+    music = Music.objects.all()[randint(0, Music.objects.count() - 1)]
+    return music
 
 
 @app.task
