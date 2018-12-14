@@ -46,7 +46,10 @@ def recommend(user, opt):
                 candidate_score[e.music].append(e.rating)
 
     for c in candidates:
-        candidate_score[c] = 0 if not candidate_score[c] else (sum(candidate_score[c]) / len(candidate_score[c]))
+        if Evaluation.objects.filter(user=user, music=c).exists():
+            candidate_score[c] = -1
+        else:
+            candidate_score[c] = 0 if not candidate_score[c] else (sum(candidate_score[c]) / len(candidate_score[c]))
     music = max(candidates, key=lambda c: candidate_score[c])
     if candidate_score[music] == 0:
         return profit, default_candidates()
