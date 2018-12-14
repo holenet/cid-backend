@@ -3,6 +3,7 @@ import copy
 import itertools
 import math
 import random
+import re
 import time
 from typing import List, Dict
 
@@ -52,11 +53,18 @@ class Timer:
             print(f'{self.indent()}{message}: Finished {end - start:.3f} s')
         self.started = False
 
+    def info(self, message):
+        if self.started:
+            print(f'\n{self.indent()}{message}')
+        else:
+            print(f'{self.indent()}{message}')
+        self.started = False
+
 
 timer = Timer()
 
 genres = set()
-artist_pk_bound = {}
+artist_pks = set()
 
 
 class DbgMuser:
@@ -65,20 +73,11 @@ class DbgMuser:
         self.uid = uid
 
         # below two attrs are user's taste
-        self.genre = []
-        self.artists = []
-
-        num_genre = random.randint(0, 3)
-        for _ in range(num_genre):
-            g = random.sample(genres, 1)[0]
-            if g not in self.genre:
-                self.genre.append(g)
+        num_genres = random.randint(0, 3)
+        self.genres = random.sample(genres, k=num_genres)
 
         num_artists = random.randint(0, 100)
-        for _ in range(num_artists):
-            a = random.randint(artist_pk_bound['lo'], artist_pk_bound['hi'])
-            if a not in self.artists:
-                self.artists.append(a)
+        self.artists = random.sample(artist_pks, k=num_artists)
 
 
 class DbgMusic:
@@ -132,15 +131,15 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
     timer.end()
 
     timer.start('Construct Random Evaluations')
-    evaluations = []
     for u in users:
         bias = random.randint(-2, 2)
+        evaluations = []
         for _ in range(num_eval + bias):
             mid = random.randint(0, num_music - 1)
             m = music[mid]
             rating = 0
 
-            if any(g in m.genre for g in u.genre):
+            if any(g in m.genre for g in u.genres):
                 rating += 5
             else:
                 rating += random.randint(0, 3)
@@ -160,7 +159,7 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
 
             new_eval = DbgEvaluation(user=u, music=m, rating=rating)
             evals.append(new_eval)
-    Evaluation.objects.bulk_create(evaluations)
+        Evaluation.objects.bulk_create(evaluations)
     timer.end()
 
     return users, music, evals
@@ -251,9 +250,7 @@ def h_cluster(clusters: List[Cluster], dim: int, depth: int):
     Hierarchical clustering implementation
     """
 
-    # print(f'depth: {depth} ({len(clusters)} clusters)')
-    # for cluster in clusters:
-    #     print([p.user_id for p in cluster.elts])
+    timer.info(f'depth: {depth} ({len(clusters)} clusters) {[len(c.elts) for c in clusters]}')
 
     if depth == 0:
         return clusters
@@ -408,8 +405,7 @@ def run_clustering():
         result[closest].append(p.user_id)
     timer.end()
 
-    # for k, v in result.items():
-    #     print(f'cluster {k}: {sorted(v)}')
+    timer.info(f'Cluster Sizes: {[(k, len(v)) for k, v in result.items()]}')
 
     timer.start('Save Clusters')
     for k, v in result.items():
@@ -425,17 +421,16 @@ class Command(BaseCommand):
         timer.init()
 
         timer.start('Gather Genres')
+        genres.clear()
         for music in Music.objects.all():
-            for genre in music.genre.split('/'):
-                for genre2 in genre.strip().split(','):
-                    if genre2 not in genres:
-                        genres.add(genre2)
+            for genre in re.split('[,/]', music.genre):
+                genres.add(genre.strip())
         timer.end()
 
         timer.start('Fetch Artist Ids')
-        artist_pks = [a.id for a in Artist.objects.all()]
-        artist_pk_bound['lo'] = min(artist_pks)
-        artist_pk_bound['hi'] = max(artist_pks)
+        artist_pks.clear()
+        for a in Artist.objects.all():
+            artist_pks.add(a.id)
         timer.end()
 
         timer.start('Cluster')
