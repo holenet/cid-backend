@@ -97,6 +97,7 @@ class DbgEvaluation:
 
 def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
     users = []
+    dummies = []
     music = []
     evals = []
 
@@ -107,6 +108,7 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
             m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
             new_user = DbgMuser(pk=i, uid=m.id)
             users.append(new_user)
+            dummies.append(new_user)
     timer.end()
 
     timer.start('Fetch Real Musers')
@@ -130,8 +132,8 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
             break
     timer.end()
 
-    timer.start('Construct Random Evaluations')
-    for u in users:
+    timer.start('Construct Random Evaluations For Dummies')
+    for u in dummies:
         bias = random.randint(-2, 2)
         evaluations = []
         for _ in range(num_eval + bias):
@@ -405,7 +407,7 @@ def run_clustering():
         result[closest].append(p.user_id)
     timer.end()
 
-    timer.info(f'Cluster Sizes: {[(k, len(v)) for k, v in result.items()]}')
+    timer.info(f'Clusters (Number, Size): {[(k, len(v)) for k, v in result.items()]}')
 
     timer.start('Save Clusters')
     for k, v in result.items():
