@@ -72,6 +72,13 @@ def construct_random_insts(num_muser, num_music, num_eval):
         m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
         new_user = DbgMuser(pk=i, uid=m.id)
         users.append(new_user)
+
+    for u in Muser.objects.all():
+        if u.username.startswith('dummy'):
+            continue
+        new_user = DbgMuser(pk=num_muser, uid=u.id)
+        users.append(new_user)
+        num_muser += 1
     
     pk = 0
     for m in Music.objects.all():
