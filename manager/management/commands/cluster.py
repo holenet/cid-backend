@@ -19,7 +19,7 @@ DEBUG = True
     5. Each user likes at most 100 artists.
 """
 
-genres = {}
+genres = set()
 artist_pk_bound = {}
 
 class DbgMuser:
@@ -33,7 +33,7 @@ class DbgMuser:
 
         num_genre = random.randint(0, 3)
         for _ in range(num_genre):
-            g = random.randint(0, len(genres))
+            g = random.sample(genres, 1)[0]
             if g not in self.genre:
                 self.genre.append(g)
 
@@ -91,8 +91,11 @@ def construct_random_insts(num_muser, num_music, num_eval):
             m = music[mid]
             rating = 0
 
-            if m.genre in u.genre:
+            if any(g in m.genre for g in u.genre):
                 rating += 3
+            else:
+                rating += random.randint(0, 2)
+            
 
             for a in m.artists:
                 if a in u.artists:
@@ -161,16 +164,22 @@ def cos_distance(p1, p2, dim):
     """
       given two points (and dimension), return cosine distance between them.
     """
+    axes = []
+    for axis in p1:
+        if axis in p2:
+            axes.append(axis)
+
+    if len(axes) == 0:
+        return 1.0
 
     # choose music about which both users had made evaluations
     vec1 = []
     vec2 = []
-    for axis in range(dim):
-        if axis in p1.keys() and axis in p2.keys():
-            vec1.append(p1[axis])
-            vec2.append(p2[axis])
+    for axis in axes:
+        vec1.append(p1[axis])
+        vec2.append(p2[axis])
 
-    if len(vec1) == 0:
+    if all(elt == 0 for elt in vec1) or all(elt == 0 for elt in vec2):
         return 1.0
 
     return spatial.distance.cosine(vec1, vec2)
@@ -190,7 +199,7 @@ def h_cluster(clusters, dim, depth):
       Hierarchical clustering implementation
     """
 
-    print(f'depth: {depth}')
+    print(f'depth: {depth} ({len(clusters)} clusters)')
     for cluster in clusters:
         print([p.user_id for p in cluster.elts])
 
@@ -200,31 +209,34 @@ def h_cluster(clusters, dim, depth):
     merged_clusters = []
     new_clusters = []
     for cluster in clusters:
+        #print(f' > {[e.user_id for e in cluster.elts]}')
         if cluster in merged_clusters:
+            #print('already merged')
             continue
-        dists = []
+        dists = {}
         for c in clusters:
-            if c is cluster:
-                dists.append(9999999999999999999)
+            if (c is cluster) or (c in merged_clusters):
+                continue
             else:
-                dist = cos_distance(cluster.pos, c.pos, dim)
-                dists.append(dist)
+                dists[c] = cos_distance(cluster.pos, c.pos, dim)
 
         neighbor = cluster
-        min_dist = 99999999999999999
-        for i in range(len(dists)):
-            if dists[i] < min_dist and clusters[i] not in merged_clusters:
-                neighbor = clusters[i]
-                min_dist = dists[i]
-        if neighbor != cluster:
-            # print(f'merge({cluster.elts}, {neighbor.elts})')
+        min_dist = 9
+        for c in clusters:
+            if (c is cluster) or (c in merged_clusters):
+                continue
+            elif dists[c] < min_dist and c not in merged_clusters:
+                neighbor = c
+                min_dist = dists[c]
+
+        if neighbor is cluster:
+            pass
+        else:
+            #print(f'merge({[e.user_id for e in cluster.elts]}, {[e.user_id for e in neighbor.elts]})')
             new_cluster = merge(cluster, neighbor)
             merged_clusters.append(cluster)
             merged_clusters.append(neighbor)
             new_clusters.append(new_cluster)
-        else:
-            merged_clusters.append(cluster)
-            new_clusters.append(cluster)
 
     return h_cluster(new_clusters, dim, depth - 1)
 
@@ -272,7 +284,7 @@ def run_clustering():
       5. Assign all points to clusters that contains representative closest to the point.
     """
     num_users = 1000
-    num_music = 1000 #Music.objects.count()
+    num_music = Music.objects.count()
     num_evals = 50 # average number of eval per dummy
 
     # Construct random users, music and evaluations.
@@ -297,11 +309,11 @@ def run_clustering():
         clusters.append(new_cluster)
 
     # Step 1: Randomly select n points.
-    sample_size = int(0.3 * len(clusters))
+    sample_size = int(0.1 * len(clusters))
     selected = sample(clusters, sample_size)
 
     # Step 2: Hierarchically cluster selected points.
-    selected = h_cluster(selected, num_music, 10)
+    selected = h_cluster(selected, num_music, 2)
 
     cluster_id = 0
     whole_reps = {}
@@ -346,13 +358,12 @@ def run_clustering():
 
 class Command(BaseCommand):
     def handle(self, *args, **kwargs):
-        idx = 0
         for music in Music.objects.all():
             for genre in music.genre.split('/'):
                 for genre2 in genre.strip().split(','):
                     if genre2 not in genres:
-                        genres[genre2] = idx
-                        idx += 1
+                        genres.add(genre2)
+                       
 
         artist_pks = [a.id for a in Artist.objects.all()]
         artist_pk_bound['lo'] = min(artist_pks)
