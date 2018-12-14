@@ -6,7 +6,8 @@ import requests
 from fcm_django.models import FCMDevice
 
 from backend.celery import app
-from chatbot.models import Message, Muser, Music
+from chatbot.models import Message, Muser
+from chatbot.recommend import recommend
 
 
 def chatscript(username, text):
@@ -30,21 +31,36 @@ def greet(user_id):
 def respond(user_id, user_text):
     user = Muser.objects.get(pk=user_id)
     text = chatscript(user.username, user_text)
-    if 'recommend' in user_text:
-        from random import randint
-        music = Music.objects.all()[randint(0, Music.objects.count() - 1)]
-        chips = [1, 2, 4]
-        message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
-    else:
+    message = None
+    if '@@' in text:
+        command, opt = text.split('@@')[1].split(':')
+        command = command.strip().lower()
+        opt = 'dict(' + opt.strip()[1:-1] + ')'
+        if command == 'recommend':
+            music = recommend(user, eval(opt))
+            if music is None:
+                text = 'Sorry, I cannot find such music.'
+                message = Message.objects.create(receiver=user, text=text)
+            else:
+                chips = [1, 2]
+                message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
+
+    if message is None:
         message = Message.objects.create(receiver=user, text=text)
 
-    device = FCMDevice.objects.filter(user=user).first()
-    if device:
-        retry = 10
-        for _ in range(retry):
-            try:
-                device.send_message(data={'message_id': message.id, 'text': text})
-            except requests.exceptions.ReadTimeout as e:
-                print(e)
-            else:
-                break
+    for device in FCMDevice.objects.filter(user=user):
+        send_push.delay(device.id, message.id)
+
+
+@app.task
+def send_push(device_id, message_id):
+    device = FCMDevice.objects.get(pk=device_id)
+    message = Message.objects.get(pk=message_id)
+    retry = 10
+    for _ in range(retry):
+        try:
+            device.send_message(data={'message_id': message.id, 'text': message.text})
+        except requests.exceptions.ReadTimeout as e:
+            print(e)
+        else:
+            break
