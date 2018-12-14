@@ -4,7 +4,9 @@ import itertools
 import math
 import random
 import time
+from typing import List, Dict
 
+from django.db import transaction
 from scipy import spatial
 
 from django.core.management.base import BaseCommand
@@ -33,7 +35,7 @@ class Timer:
     def indent(self):
         return '  ' * len(self.stack)
 
-    def start(self, message):
+    def start(self, message: str):
         if self.started:
             print(f'\n{self.indent()}{message}: ', end='', flush=True)
         else:
@@ -58,7 +60,7 @@ artist_pk_bound = {}
 
 
 class DbgMuser:
-    def __init__(self, pk, uid):
+    def __init__(self, pk: int, uid: int):
         self.id = pk
         self.uid = uid
 
@@ -80,7 +82,7 @@ class DbgMuser:
 
 
 class DbgMusic:
-    def __init__(self, pk, mid, genre, artists):
+    def __init__(self, pk: int, mid: int, genre: str, artists: List[int]):
         self.id = pk
         self.mid = mid
         self.genre = genre
@@ -88,46 +90,41 @@ class DbgMusic:
 
 
 class DbgEvaluation:
-    def __init__(self, user, music, rating):
+    def __init__(self, user: DbgMuser, music: DbgMusic, rating: int):
         self.user = user
         self.music = music
         self.rating = rating
 
 
-def construct_random_insts(num_muser, num_music, num_eval):
+def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
     users = []
     music = []
     evals = []
 
     timer.start('Construct Random Musers')
-    for i in range(num_muser):
-        try:
-            m = Muser.objects.get(username=f'dummy{i}')
-            m.delete()
-        except:
-            pass
-        m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
-        new_user = DbgMuser(pk=i, uid=m.id)
-        users.append(new_user)
+    Muser.objects.filter(username__startswith='dummy').delete()
+    with transaction.atomic():
+        for i in range(num_muser):
+            m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
+            new_user = DbgMuser(pk=i, uid=m.id)
+            users.append(new_user)
     timer.end()
 
     timer.start('Fetch Real Musers')
-    for u in Muser.objects.all():
-        if u.username.startswith('dummy'):
-            continue
-        new_user = DbgMuser(pk=num_muser, uid=u.id)
+    for uid in Muser.objects.exclude(username__startswith='dummy').values_list('id', flat=True):
+        new_user = DbgMuser(pk=num_muser, uid=uid)
         users.append(new_user)
         num_muser += 1
     timer.end()
 
     timer.start('Fetch Musics')
     pk = 0
-    for m in Music.objects.all():
+    for m in Music.objects.prefetch_related('artists').all().iterator():
         new_music = DbgMusic(pk=pk,
-                             mid = m.id,
+                             mid=m.id,
                              genre=m.genre,
-                             artists=[a.id for a in m.artists.all()])
-    
+                             artists=[aid for aid in m.artists.values_list('id', flat=True)]
+                             )
         music.append(new_music)
         pk += 1
         if pk > num_music:  # for debug
@@ -135,6 +132,7 @@ def construct_random_insts(num_muser, num_music, num_eval):
     timer.end()
 
     timer.start('Construct Random Evaluations')
+    evaluations = []
     for u in users:
         bias = random.randint(-2, 2)
         for _ in range(num_eval + bias):
@@ -143,34 +141,37 @@ def construct_random_insts(num_muser, num_music, num_eval):
             rating = 0
 
             if any(g in m.genre for g in u.genre):
-                rating += 3
+                rating += 5
             else:
-                rating += random.randint(0, 2)
+                rating += random.randint(0, 3)
 
             for a in m.artists:
                 if a in u.artists:
-                    rating += 1
+                    rating += 2
 
-            if 5 < rating:
-                rating = 5
+            if 10 < rating:
+                rating = 10
 
-            Evaluation.objects.create(user=Muser.objects.get(id=u.uid),
-                                      music=Music.objects.get(id=m.mid),
-                                      rating=rating)
+            evaluations.append(Evaluation(user_id=u.uid,
+                                          music_id=m.mid,
+                                          rating=rating
+                                          )
+                               )
 
             new_eval = DbgEvaluation(user=u, music=m, rating=rating)
             evals.append(new_eval)
+    Evaluation.objects.bulk_create(evaluations)
     timer.end()
 
     return users, music, evals
 
 
 class Point:
-    def __init__(self, user_id, pos):
+    def __init__(self, user_id: int, pos: Dict[int, float]):
         self.user_id = user_id
         self.pos = pos
 
-    def move(self, a, pos):
+    def move(self, a: float, pos: Dict[int, float]):
         merged = collections.defaultdict(list)
         for k, v in itertools.chain(self.pos.items(), pos.items()):
             merged[k].append(v)
@@ -186,12 +187,12 @@ class Point:
 
 
 class Cluster:
-    def __init__(self, elts, pos):
+    def __init__(self, elts: List[Point], pos: Dict[int, float]):
         self.elts = elts
         self.pos = pos
 
 
-def merge(c1, c2):
+def merge(c1: Cluster, c2: Cluster):
     """
     given two clusters, merge them
     """
@@ -212,7 +213,7 @@ def merge(c1, c2):
     return Cluster(c1.elts + c2.elts, pos)
 
 
-def cos_distance(p1, p2, dim):
+def cos_distance(p1: Dict[int, float], p2: Dict[int, float], dim: int):
     """
     given two points (and dimension), return cosine distance between them.
     """
@@ -237,16 +238,15 @@ def cos_distance(p1, p2, dim):
     return spatial.distance.cosine(vec1, vec2)
 
 
-def sample(listt, num):
+def sample(listt: List, num: int):
     """
     Naive sampling implementation O(N + K log(K))
-    TODO: develop faster algorithm
     """
     indices = random.sample(range(len(listt)), num)
     return [listt[i] for i in sorted(indices)]
 
 
-def h_cluster(clusters, dim, depth):
+def h_cluster(clusters: List[Cluster], dim: int, depth: int):
     """
     Hierarchical clustering implementation
     """
@@ -293,7 +293,7 @@ def h_cluster(clusters, dim, depth):
     return h_cluster(new_clusters, dim, depth - 1)
 
 
-def get_representatives(cluster, dim):
+def get_representatives(cluster: Cluster, dim: int):
     elts = cluster.elts
     num_elt = len(elts)
     num_rep = int(math.ceil(0.1 * num_elt))
