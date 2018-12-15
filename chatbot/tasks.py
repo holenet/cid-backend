@@ -45,11 +45,11 @@ def respond(user_id, user_text):
             message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
         elif cmd == 'evaluate':
             rating = int(opt['rating'])
-            title = opt['title']
-            try:
-                music = Music.objects.get(title__contains=title)
+            title = opt['title'].strip()
+            music = Music.objects.filter(title__icontains=title).first()
+            if music:
                 Evaluation.objects.create(user_id=user_id, music=music, rating=rating)
-            except Music.DoesNotExist:
+            else:
                 text = 'Sorry, I cannot find such music.'
 
     if message is None:
