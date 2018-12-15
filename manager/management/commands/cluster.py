@@ -68,16 +68,17 @@ artist_pks = set()
 
 
 class DbgMuser:
-    def __init__(self, pk: int, uid: int):
+    def __init__(self, pk: int, uid: int, real: bool=False):
         self.id = pk
         self.uid = uid
 
-        # below two attrs are user's taste
-        num_genres = random.randint(0, 3)
-        self.genres = random.sample(genres, k=num_genres)
+        if not real:
+            # below two attrs are user's taste
+            num_genres = random.randint(0, 3)
+            self.genres = set(random.sample(genres, k=num_genres))
 
-        num_artists = random.randint(0, 100)
-        self.artists = random.sample(artist_pks, k=num_artists)
+            num_artists = random.randint(0, 100)
+            self.artists = set(random.sample(artist_pks, k=num_artists))
 
         # evaluations
         self.evals = []
@@ -119,19 +120,16 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
     timer.end()
 
     timer.start('Fetch Real Musers')
-    reals = list(Muser.objects.exclude(username__startswith='dummy').all())
+    reals = Muser.objects.exclude(username__startswith='dummy')
+    reals.update(cluster=None)
     for u in reals:
-        u.cluster = None
-        new_user = DbgMuser(pk=num_muser, uid=u.id)
+        new_user = DbgMuser(pk=num_muser, uid=u.id, real=True)
         users.append(new_user)
         num_muser += 1
         for e in u.evaluations.all():
             new_eval = DbgEvaluation(user=new_user, music=music[e.music_id], rating=e.rating)
             new_user.evals.append(new_eval)
             evals.append(new_eval)
-    with transaction.atomic():
-        for u in reals:
-            u.save()
     music = tuple(music.values())
     timer.end()
 
@@ -146,9 +144,9 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
     timer.end()
 
     timer.start('Construct Random Evaluations For Dummy Musers')
+    evaluations = []
     for u in dummies:
         bias = random.randint(-2, 2)
-        evaluations = []
         for m in random.sample(music, num_eval + bias):
             rating = 0
 
@@ -173,7 +171,7 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
             new_eval = DbgEvaluation(user=u, music=m, rating=rating)
             u.evals.append(new_eval)
             evals.append(new_eval)
-        Evaluation.objects.bulk_create(evaluations)
+    Evaluation.objects.bulk_create(evaluations)
     timer.end()
 
     return users, music, evals
@@ -346,9 +344,9 @@ def run_clustering():
     4. For each cluster, move chosen representative points 20% closer to its centroid.
     5. Assign all points to clusters that contains representative closest to the point.
     """
-    num_users = 1000
+    num_users = 2000
     num_music = Music.objects.count()
-    num_evals = 50  # average number of eval per dummy
+    num_evals = 100  # average number of eval per dummy
 
     # Construct random users, music and evaluations.
     timer.start('Construct Random Instances')
@@ -441,7 +439,7 @@ class Command(BaseCommand):
                 genres.add(genre.strip())
         timer.end()
 
-        timer.start('Fetch Artist Ids')
+        timer.start('Gather Artist Ids')
         artist_pks.clear()
         for a in Artist.objects.all():
             artist_pks.add(a.id)

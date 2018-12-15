@@ -12,6 +12,7 @@ class Muser(auth_models.User):
     birthdate = models.DateField(blank=True, null=True)
 
     push_token = models.CharField(max_length=200, blank=True, null=True)
+    cluster = models.PositiveSmallIntegerField(blank=True, null=True)
 
     class Meta:
         verbose_name = 'Muser'
