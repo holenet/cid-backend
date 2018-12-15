@@ -79,6 +79,9 @@ class DbgMuser:
         num_artists = random.randint(0, 100)
         self.artists = random.sample(artist_pks, k=num_artists)
 
+        # evaluations
+        self.evals = []
+
 
 class DbgMusic:
     def __init__(self, pk: int, mid: int, genre: str, artists: List[int]):
@@ -98,25 +101,8 @@ class DbgEvaluation:
 def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
     users = []
     dummies = []
-    music = []
+    music = {}
     evals = []
-
-    timer.start('Construct Random Musers')
-    Muser.objects.filter(username__startswith='dummy').delete()
-    with transaction.atomic():
-        for i in range(num_muser):
-            m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
-            new_user = DbgMuser(pk=i, uid=m.id)
-            users.append(new_user)
-            dummies.append(new_user)
-    timer.end()
-
-    timer.start('Fetch Real Musers')
-    for uid in Muser.objects.exclude(username__startswith='dummy').values_list('id', flat=True):
-        new_user = DbgMuser(pk=num_muser, uid=uid)
-        users.append(new_user)
-        num_muser += 1
-    timer.end()
 
     timer.start('Fetch Musics')
     pk = 0
@@ -126,19 +112,44 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
                              genre=m.genre,
                              artists=[aid for aid in m.artists.values_list('id', flat=True)]
                              )
-        music.append(new_music)
+        music[m.id] = new_music
         pk += 1
         if pk > num_music:  # for debug
             break
     timer.end()
 
-    timer.start('Construct Random Evaluations For Dummies')
+    timer.start('Fetch Real Musers')
+    reals = list(Muser.objects.exclude(username__startswith='dummy').all())
+    for u in reals:
+        u.cluster = None
+        new_user = DbgMuser(pk=num_muser, uid=u.id)
+        users.append(new_user)
+        num_muser += 1
+        for e in u.evaluations.all():
+            new_eval = DbgEvaluation(user=new_user, music=music[e.music_id], rating=e.rating)
+            new_user.evals.append(new_eval)
+            evals.append(new_eval)
+    with transaction.atomic():
+        for u in reals:
+            u.save()
+    music = tuple(music.values())
+    timer.end()
+
+    timer.start('Construct Random Dummy Musers')
+    Muser.objects.filter(username__startswith='dummy').delete()
+    with transaction.atomic():
+        for i in range(num_muser):
+            m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
+            new_user = DbgMuser(pk=i, uid=m.id)
+            users.append(new_user)
+            dummies.append(new_user)
+    timer.end()
+
+    timer.start('Construct Random Evaluations For Dummy Musers')
     for u in dummies:
         bias = random.randint(-2, 2)
         evaluations = []
-        for _ in range(num_eval + bias):
-            mid = random.randint(0, num_music - 1)
-            m = music[mid]
+        for m in random.sample(music, num_eval + bias):
             rating = 0
 
             if any(g in m.genre for g in u.genres):
@@ -160,6 +171,7 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
                                )
 
             new_eval = DbgEvaluation(user=u, music=m, rating=rating)
+            u.evals.append(new_eval)
             evals.append(new_eval)
         Evaluation.objects.bulk_create(evaluations)
     timer.end()
@@ -272,7 +284,7 @@ def h_cluster(clusters: List[Cluster], dim: int, depth: int):
                 dists[c] = cos_distance(cluster.pos, c.pos, dim)
 
         neighbor = cluster
-        min_dist = 9
+        min_dist = 99
         for c in clusters:
             if (c is cluster) or (c in merged_clusters):
                 continue
@@ -348,11 +360,10 @@ def run_clustering():
     points = []
     for u in users:
         pos = {}
-        for e in evals:
-            if e.user is u:
-                pos[e.music.id] = e.rating
+        for e in u.evals:
+            pos[e.music.id] = e.rating
 
-        if len(pos) > 0:
+        if pos:
             new_point = Point(u.id, pos)
             points.append(new_point)
 
@@ -391,9 +402,7 @@ def run_clustering():
 
     # Step 5: Assign all points to clusters that contains the closest rep.
     timer.start('Step 5')
-    result = {}
-    for i in range(cluster_id):
-        result[i] = []
+    result = [[] for _ in range(cluster_id)]
 
     for p in points:
         closest = 0
@@ -407,13 +416,16 @@ def run_clustering():
         result[closest].append(p.user_id)
     timer.end()
 
-    timer.info(f'Clusters (Number, Size): {[(k, len(v)) for k, v in result.items()]}')
+    timer.info(f'Clusters (Number, Size): {[(k, len(v)) for k, v in enumerate(result)]}')
 
     timer.start('Save Clusters')
-    for k, v in result.items():
+    id_to_cluster = {}
+    for k, v in enumerate(result):
         for u in v:
-            user_instance = Muser.objects.get(id=users[u].uid)
-            user_instance.cluster = k
+            id_to_cluster[users[u].uid] = k
+    with transaction.atomic():
+        for user_instance in Muser.objects.filter(pk__in=id_to_cluster).all():
+            user_instance.cluster = id_to_cluster[user_instance.id]
             user_instance.save()
     timer.end()
 
