@@ -6,7 +6,7 @@ import requests
 from fcm_django.models import FCMDevice
 
 from backend.celery import app
-from chatbot.models import Message, Muser
+from chatbot.models import Message, Muser, Evaluation, Music
 from chatbot.recommend import recommend
 
 
@@ -33,17 +33,24 @@ def respond(user_id, user_text):
     text = chatscript(user.username, user_text)
     message = None
     if '@@' in text:
-        command, opt = text.split('@@')[1].split(':')
-        command = command.strip().lower()
-        opt = 'dict(' + opt.strip()[1:-1] + ')'
-        if command == 'recommend':
-            music = recommend(user, eval(opt))
-            if music is None:
-                text = 'Sorry, I cannot find such music.'
-                message = Message.objects.create(receiver=user, text=text)
+        text, cmd_opt = text.split('@@')
+        cmd, opt = cmd_opt.split(':')
+        cmd = cmd.strip().lower()
+        opt = eval('dict(' + opt.strip()[1:-1] + ')')
+        if cmd == 'recommend':
+            profit, music = recommend(user, opt)
+            if not profit:
+                text = 'Sorry, I cannot find such music. What about this?'
+            chips = [1, 2]
+            message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
+        elif cmd == 'evaluate':
+            rating = int(opt['rating'])
+            title = opt['title'].strip()
+            music = Music.objects.filter(title__icontains=title).first()
+            if music:
+                Evaluation.objects.create(user_id=user_id, music=music, rating=rating)
             else:
-                chips = [1, 2]
-                message = Message.objects.create(receiver=user, text=text, music=music, chips=chips)
+                text = 'Sorry, I cannot find such music.'
 
     if message is None:
         message = Message.objects.create(receiver=user, text=text)
