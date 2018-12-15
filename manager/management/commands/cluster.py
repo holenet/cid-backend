@@ -122,10 +122,9 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
     timer.start('Fetch Real Musers')
     reals = Muser.objects.exclude(username__startswith='dummy')
     reals.update(cluster=None)
-    for u in reals:
-        new_user = DbgMuser(pk=num_muser, uid=u.id, real=True)
+    for i, u in enumerate(reals):
+        new_user = DbgMuser(pk=i, uid=u.id, real=True)
         users.append(new_user)
-        num_muser += 1
         for e in u.evaluations.all():
             new_eval = DbgEvaluation(user=new_user, music=music[e.music_id], rating=e.rating)
             new_user.evals.append(new_eval)
