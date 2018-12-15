@@ -32,7 +32,8 @@ headers = {'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:63.0) Gecko
 @receiver(signals.post_save, sender=Crawler)
 def crawl_help(sender, instance, created, **kwargs):
     if created:
-        crawl.delay(instance.id)
+        # crawl.delay(instance.id)
+        crawl(instance.id)
 
 
 def get_tree(url):

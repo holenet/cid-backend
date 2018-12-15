@@ -71,7 +71,7 @@ class MusicAdmin(admin.ModelAdmin):
 
 
 class MuserAdmin(admin.ModelAdmin):
-    list_display = ('username', 'gender_string', 'birthdate', 'number_of_messages', 'signed_in', 'pushtoken')
+    list_display = ('username', 'gender_string', 'birthdate', 'number_of_messages', 'cluster', 'signed_in', 'pushtoken')
 
     def gender_string(self, obj):
         if obj.gender == 1:
