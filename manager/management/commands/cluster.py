@@ -5,7 +5,7 @@ import math
 import random
 import re
 import time
-from typing import List, Dict
+from typing import List, Dict, Set
 
 from django.db import transaction
 from scipy import spatial
@@ -85,7 +85,7 @@ class DbgMuser:
 
 
 class DbgMusic:
-    def __init__(self, pk: int, mid: int, genre: str, artists: List[int]):
+    def __init__(self, pk: int, mid: int, genre: str, artists: Set[int]):
         self.id = pk
         self.mid = mid
         self.genre = genre
@@ -111,7 +111,7 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
         new_music = DbgMusic(pk=pk,
                              mid=m.id,
                              genre=m.genre,
-                             artists=[aid for aid in m.artists.values_list('id', flat=True)]
+                             artists=set(aid for aid in m.artists.values_list('id', flat=True))
                              )
         music[m.id] = new_music
         pk += 1
@@ -155,9 +155,7 @@ def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
             else:
                 rating += random.randint(0, 3)
 
-            for a in m.artists:
-                if a in u.artists:
-                    rating += 2
+            rating += len(m.artists & u.artists) * 2
 
             if 10 < rating:
                 rating = 10
