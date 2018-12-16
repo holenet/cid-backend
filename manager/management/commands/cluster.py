@@ -1,9 +1,13 @@
 import collections
 import copy
-import datetime
 import itertools
 import math
 import random
+import re
+import time
+from typing import List, Dict, Set
+
+from django.db import transaction
 from scipy import spatial
 
 from django.core.management.base import BaseCommand
@@ -11,40 +15,77 @@ from chatbot.models import *
 
 DEBUG = True
 """
-  assumptions for debug:
-    1. There are 8 genres.
-    2. There are 500 artists.
-    3. Each music is made by at most three artists.
-    4. Each user likes at most three genre.
-    5. Each user likes at most 100 artists.
+assumptions for debug:
+1. There are 8 genres.
+2. There are 500 artists.
+3. Each music is made by at most three artists.
+4. Each user likes at most three genre.
+5. Each user likes at most 100 artists.
 """
 
+
+class Timer:
+    def __init__(self):
+        self.stack = []
+        self.started = False
+
+    def init(self):
+        self.stack = []
+        self.started = False
+
+    def indent(self):
+        return '  ' * len(self.stack)
+
+    def start(self, message: str):
+        if self.started:
+            print(f'\n{self.indent()}{message}: ', end='', flush=True)
+        else:
+            print(f'{self.indent()}{message}: ', end='', flush=True)
+        self.stack.append((message, time.time()))
+        self.started = True
+
+    def end(self):
+        message, start = self.stack.pop()
+        end = time.time()
+        if self.started:
+            print(f'Finished {end - start:.3f} s')
+        else:
+            print(f'{self.indent()}{message}: Finished {end - start:.3f} s')
+        self.started = False
+
+    def info(self, message):
+        if self.started:
+            print(f'\n{self.indent()}{message}')
+        else:
+            print(f'{self.indent()}{message}')
+        self.started = False
+
+
+timer = Timer()
+
 genres = set()
-artist_pk_bound = {}
+artist_pks = set()
+
 
 class DbgMuser:
-    def __init__(self, pk, uid):
+    def __init__(self, pk: int, uid: int, real: bool=False):
         self.id = pk
         self.uid = uid
 
-        # below two attrs are user's taste
-        self.genre = []
-        self.artists = []
+        if not real:
+            # below two attrs are user's taste
+            num_genres = random.randint(0, 3)
+            self.genres = set(random.sample(genres, k=num_genres))
 
-        num_genre = random.randint(0, 3)
-        for _ in range(num_genre):
-            g = random.sample(genres, 1)[0]
-            if g not in self.genre:
-                self.genre.append(g)
+            num_artists = random.randint(0, 100)
+            self.artists = set(random.sample(artist_pks, k=num_artists))
 
-        num_artists = random.randint(0, 100)
-        for _ in range(num_artists):
-            a = random.randint(artist_pk_bound['lo'], artist_pk_bound['hi'])
-            if a not in self.artists:
-                self.artists.append(a)
+        # evaluations
+        self.evals = []
+
 
 class DbgMusic:
-    def __init__(self, pk, mid, genre, artists):
+    def __init__(self, pk: int, mid: int, genre: str, artists: Set[int]):
         self.id = pk
         self.mid = mid
         self.genre = genre
@@ -52,80 +93,94 @@ class DbgMusic:
 
 
 class DbgEvaluation:
-    def __init__(self, user, music, rating):
+    def __init__(self, user: DbgMuser, music: DbgMusic, rating: int):
         self.user = user
         self.music = music
         self.rating = rating
 
 
-def construct_random_insts(num_muser, num_music, num_eval):
+def construct_random_insts(num_muser: int, num_music: int, num_eval: int):
     users = []
-    music = []
+    dummies = []
+    music = {}
     evals = []
 
-    for i in range(num_muser):
-        try:
-            m = Muser.objects.get(username=f'dummy{i}')
-            m.delete()
-        except Exception as e:
-            pass
-        m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
-        new_user = DbgMuser(pk=i, uid=m.id)
-        users.append(new_user)
+    timer.start('Fetch Musics')
+    pk = 0
+    for m in Music.objects.prefetch_related('artists').all().iterator():
+        new_music = DbgMusic(pk=pk,
+                             mid=m.id,
+                             genre=m.genre,
+                             artists=set(aid for aid in m.artists.values_list('id', flat=True))
+                             )
+        music[m.id] = new_music
+        pk += 1
+        if pk > num_music:  # for debug
+            break
+    timer.end()
 
-    for u in Muser.objects.all():
-        if u.username.startswith('dummy'):
-            continue
-        new_user = DbgMuser(pk=num_muser, uid=u.id)
+    timer.start('Fetch Real Musers')
+    reals = Muser.objects.exclude(username__startswith='dummy')
+    reals.update(cluster=None)
+    for u in reals:
+        new_user = DbgMuser(pk=num_muser, uid=u.id, real=True)
         users.append(new_user)
         num_muser += 1
-    
-    pk = 0
-    for m in Music.objects.all():
-        new_music = DbgMusic(pk=pk,
-                             mid = m.id,
-                             genre=m.genre,
-                             artists=[a.id for a in m.artists.all()])
-    
-        music.append(new_music)
-        pk += 1
-        if pk > num_music: break # for debug
+        for e in u.evaluations.all():
+            new_eval = DbgEvaluation(user=new_user, music=music[e.music_id], rating=e.rating)
+            new_user.evals.append(new_eval)
+            evals.append(new_eval)
+    music = tuple(music.values())
+    timer.end()
 
-    for u in users:
+    timer.start('Construct Random Dummy Musers')
+    Muser.objects.filter(username__startswith='dummy').delete()
+    with transaction.atomic():
+        for i in range(num_muser):
+            m = Muser.objects.create(username=f'dummy{i}', password='!Q@W#E$R')
+            new_user = DbgMuser(pk=i, uid=m.id)
+            users.append(new_user)
+            dummies.append(new_user)
+    timer.end()
+
+    timer.start('Construct Random Evaluations For Dummy Musers')
+    evaluations = []
+    for u in dummies:
         bias = random.randint(-2, 2)
-        for _ in range(num_eval + bias):
-            mid = random.randint(0, num_music - 1)
-            m = music[mid]
+        for m in random.sample(music, num_eval + bias):
             rating = 0
 
-            if any(g in m.genre for g in u.genre):
-                rating += 3
+            if any(g in m.genre for g in u.genres):
+                rating += 5
             else:
-                rating += random.randint(0, 2)
-            
+                rating += random.randint(0, 3)
 
-            for a in m.artists:
-                if a in u.artists:
-                    rating += 1
+            rating += len(m.artists & u.artists) * 2
 
-            if 5 < rating:
-                rating = 5
+            if 10 < rating:
+                rating = 10
 
-            Evaluation.objects.create(user=Muser.objects.get(id=u.uid),
-                                      music=Music.objects.get(id=m.mid),
-                                      rating=rating)
+            evaluations.append(Evaluation(user_id=u.uid,
+                                          music_id=m.mid,
+                                          rating=rating
+                                          )
+                               )
 
             new_eval = DbgEvaluation(user=u, music=m, rating=rating)
+            u.evals.append(new_eval)
             evals.append(new_eval)
+    Evaluation.objects.bulk_create(evaluations)
+    timer.end()
 
     return users, music, evals
 
+
 class Point:
-    def __init__(self, user_id, pos):
+    def __init__(self, user_id: int, pos: Dict[int, float]):
         self.user_id = user_id
         self.pos = pos
 
-    def move(self, a, pos):
+    def move(self, a: float, pos: Dict[int, float]):
         merged = collections.defaultdict(list)
         for k, v in itertools.chain(self.pos.items(), pos.items()):
             merged[k].append(v)
@@ -141,14 +196,14 @@ class Point:
 
 
 class Cluster:
-    def __init__(self, elts, pos):
+    def __init__(self, elts: List[Point], pos: Dict[int, float]):
         self.elts = elts
         self.pos = pos
 
 
-def merge(c1, c2):
+def merge(c1: Cluster, c2: Cluster):
     """
-      given two clusters, merge them
+    given two clusters, merge them
     """
 
     p1 = c1.pos
@@ -167,9 +222,9 @@ def merge(c1, c2):
     return Cluster(c1.elts + c2.elts, pos)
 
 
-def cos_distance(p1, p2, dim):
+def cos_distance(p1: Dict[int, float], p2: Dict[int, float], dim: int):
     """
-      given two points (and dimension), return cosine distance between them.
+    given two points (and dimension), return cosine distance between them.
     """
     axes = []
     for axis in p1:
@@ -192,23 +247,20 @@ def cos_distance(p1, p2, dim):
     return spatial.distance.cosine(vec1, vec2)
 
 
-def sample(listt, num):
+def sample(listt: List, num: int):
     """
-      Naive sampling implementation O(N + K log(K))
-      TODO: develop faster algorithm
+    Naive sampling implementation O(N + K log(K))
     """
     indices = random.sample(range(len(listt)), num)
     return [listt[i] for i in sorted(indices)]
 
 
-def h_cluster(clusters, dim, depth):
+def h_cluster(clusters: List[Cluster], dim: int, depth: int):
     """
-      Hierarchical clustering implementation
+    Hierarchical clustering implementation
     """
 
-    print(f'depth: {depth} ({len(clusters)} clusters)')
-    for cluster in clusters:
-        print([p.user_id for p in cluster.elts])
+    timer.info(f'depth: {depth} ({len(clusters)} clusters) {[len(c.elts) for c in clusters]}')
 
     if depth == 0:
         return clusters
@@ -216,9 +268,9 @@ def h_cluster(clusters, dim, depth):
     merged_clusters = []
     new_clusters = []
     for cluster in clusters:
-        #print(f' > {[e.user_id for e in cluster.elts]}')
+        # print(f' > {[e.user_id for e in cluster.elts]}')
         if cluster in merged_clusters:
-            #print('already merged')
+            # print('already merged')
             continue
         dists = {}
         for c in clusters:
@@ -228,7 +280,7 @@ def h_cluster(clusters, dim, depth):
                 dists[c] = cos_distance(cluster.pos, c.pos, dim)
 
         neighbor = cluster
-        min_dist = 9
+        min_dist = 99
         for c in clusters:
             if (c is cluster) or (c in merged_clusters):
                 continue
@@ -239,7 +291,7 @@ def h_cluster(clusters, dim, depth):
         if neighbor is cluster:
             pass
         else:
-            #print(f'merge({[e.user_id for e in cluster.elts]}, {[e.user_id for e in neighbor.elts]})')
+            # print(f'merge({[e.user_id for e in cluster.elts]}, {[e.user_id for e in neighbor.elts]})')
             new_cluster = merge(cluster, neighbor)
             merged_clusters.append(cluster)
             merged_clusters.append(neighbor)
@@ -248,7 +300,7 @@ def h_cluster(clusters, dim, depth):
     return h_cluster(new_clusters, dim, depth - 1)
 
 
-def get_representatives(cluster, dim):
+def get_representatives(cluster: Cluster, dim: int):
     elts = cluster.elts
     num_elt = len(elts)
     num_rep = int(math.ceil(0.1 * num_elt))
@@ -281,31 +333,33 @@ def get_representatives(cluster, dim):
 
 def run_clustering():
     """
-      CURE Clustering implementation
-      TODO: parallelize
+    CURE Clustering implementation
+    TODO: parallelize
 
-      1. Randomly select n points.
-      2. Hierarchically cluster those chosen points.
-      3. For each cluster, select k representative points.
-      4. For each cluster, move chosen representative points 20% closer to its centroid.
-      5. Assign all points to clusters that contains representative closest to the point.
+    1. Randomly select n points.
+    2. Hierarchically cluster those chosen points.
+    3. For each cluster, select k representative points.
+    4. For each cluster, move chosen representative points 20% closer to its centroid.
+    5. Assign all points to clusters that contains representative closest to the point.
     """
-    num_users = 1000
+    num_users = 2000
     num_music = Music.objects.count()
-    num_evals = 50 # average number of eval per dummy
+    num_evals = 100  # average number of eval per dummy
 
     # Construct random users, music and evaluations.
+    timer.start('Construct Random Instances')
     users, music, evals = construct_random_insts(num_users, num_music, num_evals)
+    timer.end()
 
     # Let each user be a point.
+    timer.start('Init Clusters')
     points = []
     for u in users:
         pos = {}
-        for e in evals:
-            if e.user is u:
-                pos[e.music.id] = e.rating
+        for e in u.evals:
+            pos[e.music.id] = e.rating
 
-        if len(pos) > 0:
+        if pos:
             new_point = Point(u.id, pos)
             points.append(new_point)
 
@@ -314,11 +368,15 @@ def run_clustering():
     for p in points:
         new_cluster = Cluster([p], p.pos)
         clusters.append(new_cluster)
+    timer.end()
 
     # Step 1: Randomly select n points.
+    timer.start('Step 1')
     sample_size = int(0.1 * len(clusters))
     selected = sample(clusters, sample_size)
+    timer.end()
 
+    timer.start('Step 2, 3, 4')
     # Step 2: Hierarchically cluster selected points.
     selected = h_cluster(selected, num_music, 2)
 
@@ -336,11 +394,11 @@ def run_clustering():
             whole_reps[r] = cluster_id
 
         cluster_id += 1
+    timer.end()
 
     # Step 5: Assign all points to clusters that contains the closest rep.
-    result = {}
-    for i in range(cluster_id):
-        result[i] = []
+    timer.start('Step 5')
+    result = [[] for _ in range(cluster_id)]
 
     for p in points:
         closest = 0
@@ -352,29 +410,39 @@ def run_clustering():
                 min_dist = dist
 
         result[closest].append(p.user_id)
+    timer.end()
 
-    for k, v in result.items():
-        print(f'cluster {k}: {sorted(v)}')
+    timer.info(f'Clusters (Number, Size): {[(k, len(v)) for k, v in enumerate(result)]}')
 
-    for k, v in result.items():
+    timer.start('Save Clusters')
+    id_to_cluster = {}
+    for k, v in enumerate(result):
         for u in v:
-            user_instance = Muser.objects.get(id=users[u].uid)
-            user_instance.cluster = k
+            id_to_cluster[users[u].uid] = k
+    with transaction.atomic():
+        for user_instance in Muser.objects.filter(pk__in=id_to_cluster).all():
+            user_instance.cluster = id_to_cluster[user_instance.id]
             user_instance.save()
+    timer.end()
 
 
 class Command(BaseCommand):
     def handle(self, *args, **kwargs):
+        timer.init()
+
+        timer.start('Gather Genres')
+        genres.clear()
         for music in Music.objects.all():
-            for genre in music.genre.split('/'):
-                for genre2 in genre.strip().split(','):
-                    if genre2 not in genres:
-                        genres.add(genre2)
-                       
+            for genre in re.split('[,/]', music.genre):
+                genres.add(genre.strip())
+        timer.end()
 
-        artist_pks = [a.id for a in Artist.objects.all()]
-        artist_pk_bound['lo'] = min(artist_pks)
-        artist_pk_bound['hi'] = max(artist_pks)
-        
+        timer.start('Gather Artist Ids')
+        artist_pks.clear()
+        for a in Artist.objects.all():
+            artist_pks.add(a.id)
+        timer.end()
+
+        timer.start('Cluster')
         run_clustering()
-
+        timer.end()
