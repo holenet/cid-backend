@@ -37,7 +37,7 @@ def recommend(user, opt):
         ratings = list(map(lambda x: x.original_rating, default_candidates))
         import time
         last = time.time()
-        fan_artists = set([a.id for a in user.fan_artists.all().values_list('id', flat=True)])
+        fan_artists = set(user.fan_artists.all().values_list('id', flat=True))
         l1 = 0
         l2 = 0
         for i, c in enumerate(default_candidates):
