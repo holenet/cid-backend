@@ -34,34 +34,28 @@ def recommend(user, opt):
 
     def default_recommend():
         # Choose one music by original rating
-        ratings = list(map(lambda x: x.original_rating, default_candidates))
-        import time
-        last = time.time()
+        ratings = [x.original_rating for x in default_candidates]
         fan_artists = set(user.fan_artists.all().values_list('id', flat=True))
-        l1 = 0
-        l2 = 0
+        artist_point = 1
+        genre_point = 1
         for i, c in enumerate(default_candidates):
-            last1 = time.time()
             if music_to_artists:
                 for a_id in music_to_artists[c.id]:
                     if a_id in fan_artists:
-                        ratings[i] += 0.1
+                        ratings[i] += artist_point
             else:
                 for a_id in c.artists.all().values_list('id', flat=True):
                     if a_id in fan_artists:
-                        ratings[i] += 0.1
-            l1 += time.time() - last1
+                        ratings[i] += artist_point
 
-            last2 = time.time()
             for g in re.split('[,/]', c.genre):
                 if g.strip() in user.fan_genres:
-                    ratings[i] += 0.1
-            l2 += time.time() - last2
+                    ratings[i] += genre_point
 
+        ratings = [r ** 2 for r in ratings]
         total_ratings = sum(ratings)
-        weights = list(map(lambda x: x / total_ratings, ratings))
+        weights = [r / total_ratings for r in ratings]
         music = choice(candidates, p=weights)
-        print(f'{time.time() - last:.2f} {l1:.2f} {l2:.2f}')
         return music
 
     user_evals = user.evaluations.all()
