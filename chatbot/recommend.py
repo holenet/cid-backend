@@ -5,14 +5,14 @@ from chatbot.models import *
 
 def recommend(user, opt):
     # Make candidates by option
-    candidates = Music.objects.all()
+    candidates = Music.objects.exclude(pk__in=user.recommended.all())
     if 'genre' in opt:
         candidates = candidates.filter(genre__icontains=opt['genre'])
     if 'artist' in opt:
         candidates = candidates.filter(artists__name__icontains=opt['artist'])
     if not candidates:
         profit = False
-        candidates = Music.objects.all()
+        candidates = Music.objects.exclude(pk__in=user.recommended.all())
     else:
         profit = True
 
@@ -30,6 +30,7 @@ def recommend(user, opt):
     user_evals = user.evaluations.all()
     if len(user_evals) < 10:
         return profit, default_recommend()
+
     candidate_score = {}
     for c in candidates:
         candidate_score[c.id] = []
@@ -54,5 +55,5 @@ def recommend(user, opt):
     music = max(candidates, key=lambda c: candidate_score[c.id])
     if candidate_score[music.id] == 0:
         return profit, default_recommend()
-    
+
     return profit, music

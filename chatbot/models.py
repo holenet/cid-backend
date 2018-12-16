@@ -14,6 +14,8 @@ class Muser(auth_models.User):
     push_token = models.CharField(max_length=200, blank=True, null=True)
     cluster = models.PositiveSmallIntegerField(blank=True, null=True)
 
+    recommended = models.ManyToManyField('chatbot.Music')
+
     class Meta:
         verbose_name = 'Muser'
 
