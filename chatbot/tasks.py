@@ -40,6 +40,8 @@ def respond(user_id, user_text):
         opt = eval('dict(' + opt.strip()[1:-1] + ')')
         if cmd == 'recommend':
             profit, music = recommend(user, opt)
+            user.recommended.add(music)
+
             if not profit:
                 text = 'Sorry, I cannot find such music. What about this?'
             chips = [1, 2]
