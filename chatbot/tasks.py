@@ -3,6 +3,7 @@ from __future__ import absolute_import, unicode_literals
 import socket
 
 import requests
+from django.contrib.postgres.search import TrigramSimilarity
 from fcm_django.models import FCMDevice
 
 from backend.celery import app
@@ -39,6 +40,8 @@ def respond(user_id, user_text):
         opt = eval('dict(' + opt.strip()[1:-1] + ')')
         if cmd == 'recommend':
             profit, music = recommend(user, opt)
+            user.recommended.add(music)
+
             if not profit:
                 text = 'Sorry, I cannot find such music. What about this?'
             chips = [1, 2]
@@ -46,7 +49,7 @@ def respond(user_id, user_text):
         elif cmd == 'evaluate':
             rating = int(opt['rating'])
             title = opt['title'].strip()
-            music = Music.objects.filter(title__icontains=title).first()
+            music = Music.objects.filter(title__trigram_similar=title).annotate(similarity=TrigramSimilarity('title', title)).order_by('-similarity').first()
             if music:
                 Evaluation.objects.create(user_id=user_id, music=music, rating=rating)
             else:
