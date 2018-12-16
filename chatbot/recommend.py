@@ -55,5 +55,5 @@ def recommend(user, opt):
     music = max(candidates, key=lambda c: candidate_score[c.id])
     if candidate_score[music.id] == 0:
         return profit, default_recommend()
-    
+
     return profit, music
