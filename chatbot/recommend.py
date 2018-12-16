@@ -29,9 +29,7 @@ def recommend(user, opt):
 
     user_evals = user.evaluations.all()
     if len(user_evals) < 10:
-        music = default_recommend()
-        user.recommended.add(music)
-        return profit, music
+        return profit, default_recommend()
 
     candidate_score = {}
     for c in candidates:
@@ -40,9 +38,7 @@ def recommend(user, opt):
     cluster = user.cluster
     if cluster is None:
         # this means clustering has done before user signed up or made evaluations or etc.
-        music = default_recommend()
-        user.recommended.add(music)
-        return profit, music
+        return profit, default_recommend()
 
     neighbors = Muser.objects.filter(cluster=cluster)
     for n in neighbors:
@@ -58,9 +54,6 @@ def recommend(user, opt):
             candidate_score[mid] = 0 if not candidate_score[mid] else (sum(candidate_score[mid]) / len(candidate_score[mid]))
     music = max(candidates, key=lambda c: candidate_score[c.id])
     if candidate_score[music.id] == 0:
-        music = default_recommend()
-        user.recommended.add(music)
-        return profit, music
+        return profit, default_recommend()
     
-    user.recommended.add(music)
     return profit, music
