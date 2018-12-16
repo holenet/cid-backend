@@ -35,6 +35,8 @@ def recommend(user, opt):
     def default_recommend():
         # Choose one music by original rating
         ratings = [x.original_rating for x in default_candidates]
+        total_original_rating = sum(ratings)
+        ratings = [10 * r / total_original_rating for r in ratings]
         fan_artists = set(user.fan_artists.all().values_list('id', flat=True))
         artist_point = 1
         genre_point = 1
