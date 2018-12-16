@@ -9,7 +9,7 @@ def recommend(user, opt):
     if 'genre' in opt:
         candidates = candidates.filter(genre__trigram_similar=opt['genre'])
     if 'artist' in opt:
-        candidates = candidates.filter(artists__name___trigram_similar=opt['artist'])
+        candidates = candidates.filter(artists__name__trigram_similar=opt['artist'])
     if not candidates:
         profit = False
         candidates = Music.objects.all()
