@@ -16,6 +16,11 @@ class Muser(auth_models.User):
 
     recommended = models.ManyToManyField('chatbot.Music')
 
+    ###
+    fan_artists = models.ManyToManyField('chatbot.Artist')
+    fan_genres = models.CharField(max_length=255, blank=True, default='')
+    ###
+
     class Meta:
         verbose_name = 'Muser'
 

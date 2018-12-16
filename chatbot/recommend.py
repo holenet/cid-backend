@@ -1,3 +1,4 @@
+import re
 from numpy.random import choice
 
 from chatbot.models import *
@@ -22,6 +23,19 @@ def recommend(user, opt):
     def default_recommend():
         # Choose one music by original rating
         ratings = list(map(lambda x: x.original_rating, default_candidates))
+
+        idx = 0
+        for c in default_candidates:
+            for a in c.artists:
+                if a in user.fan_artists.all():
+                    ratings[idx] += 0.1
+
+            for g in re.split('[,/]', c.genre):
+                if g.strip() in user.fan_genres:
+                    ratings[idx] += 0.1
+
+            idx += 1
+
         total_ratings = sum(ratings)
         weights = list(map(lambda x: x / total_ratings, ratings))
         music = choice(candidates, p=weights)
@@ -52,6 +66,7 @@ def recommend(user, opt):
             candidate_score[mid] = 0
         else:
             candidate_score[mid] = 0 if not candidate_score[mid] else (sum(candidate_score[mid]) / len(candidate_score[mid]))
+
     music = max(candidates, key=lambda c: candidate_score[c.id])
     if candidate_score[music.id] == 0:
         return profit, default_recommend()

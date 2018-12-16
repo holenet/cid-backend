@@ -7,7 +7,7 @@ from django.contrib.postgres.search import TrigramSimilarity
 from fcm_django.models import FCMDevice
 
 from backend.celery import app
-from chatbot.models import Message, Muser, Evaluation, Music
+from chatbot.models import Message, Muser, Evaluation, Music, Artist
 from chatbot.recommend import recommend
 
 
@@ -54,6 +54,30 @@ def respond(user_id, user_text):
                 Evaluation.objects.create(user_id=user_id, music=music, rating=rating)
             else:
                 text = 'Sorry, I cannot find such music.'
+        ###
+        elif cmd == 'fan':
+            artist_name = opt.get('artist')
+            genre_name = opt.get('genre')
+
+            if artist_name:
+                artist = Artist.objects.filter(name__trigram_similar=artist_name).annotate(similarity=TrigramSimilarity('name', artist_name)).order_by('-similarity').first()
+                if artist:
+                    user.fan_artists.add(artist)
+                else:
+                    text = "Sorry, I haven't heard of that artist. What kind of artist is he?"
+
+            if genre_name:
+                music =  Music.objects.filter(genre__trigram_similar=genre_name).annotate(similarity=TrigramSimilarity('genre', genre_name)).order_by('-similarity').first()
+                if music:
+                    genre_name = music.genre
+                    fan_genres = user.fan_genres
+                    if genre_name in fan_genres:
+                        pass
+                    else:
+                        user.fan_genres.set(fan_genres + genre_name + "@")
+                else:
+                    text = "Sorry, I haven't heard of that genre. What kind of genre is it?"
+        ###
 
     if message is None:
         message = Message.objects.create(receiver=user, text=text)
