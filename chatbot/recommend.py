@@ -8,10 +8,8 @@ def recommend(user, opt):
     candidates = Music.objects.exclude(pk__in=user.recommended.all())
     if 'genre' in opt:
         candidates = candidates.filter(genre__search=opt['genre'])
-        print([m.genre for m in candidates])
     if 'artist' in opt:
         candidates = candidates.filter(artists__name__search=opt['artist'])
-        print(set([m.artists.all().first() for m in candidates]))
     if not candidates:
         profit = False
         candidates = Music.objects.exclude(pk__in=user.recommended.all())
