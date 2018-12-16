@@ -61,6 +61,6 @@ def recommend(user, opt):
         music = default_recommend()
         user.recommended.add(music)
         return profit, music
-    
+
     user.recommended.add(music)
     return profit, music
