@@ -1,7 +1,19 @@
+import pickle
 import re
+
+from django.conf import settings
 from numpy.random import choice
 
 from chatbot.models import *
+
+
+try:
+    with open(settings.MUSIC_TO_ARTISTS, 'rb') as f:
+        music_to_artists = pickle.load(f)
+    print('music_to_artists loaded')
+except Exception as e:
+    music_to_artists = None
+    print(f'music_to_artists does not exist!! {e}')
 
 
 def recommend(user, opt):
@@ -23,22 +35,33 @@ def recommend(user, opt):
     def default_recommend():
         # Choose one music by original rating
         ratings = list(map(lambda x: x.original_rating, default_candidates))
+        import time
+        last = time.time()
+        fan_artists = set([a.id for a in user.fan_artists.all().values_list('id', flat=True)])
+        l1 = 0
+        l2 = 0
+        for i, c in enumerate(default_candidates):
+            last1 = time.time()
+            if music_to_artists:
+                for a_id in music_to_artists[c.id]:
+                    if a_id in fan_artists:
+                        ratings[i] += 0.1
+            else:
+                for a_id in c.artists.all().values_list('id', flat=True):
+                    if a_id in fan_artists:
+                        ratings[i] += 0.1
+            l1 += time.time() - last1
 
-        idx = 0
-        for c in default_candidates:
-            for a in c.artists:
-                if a in user.fan_artists.all():
-                    ratings[idx] += 0.1
-
+            last2 = time.time()
             for g in re.split('[,/]', c.genre):
                 if g.strip() in user.fan_genres:
-                    ratings[idx] += 0.1
-
-            idx += 1
+                    ratings[i] += 0.1
+            l2 += time.time() - last2
 
         total_ratings = sum(ratings)
         weights = list(map(lambda x: x / total_ratings, ratings))
         music = choice(candidates, p=weights)
+        print(f'{time.time() - last:.2f} {l1:.2f} {l2:.2f}')
         return music
 
     user_evals = user.evaluations.all()

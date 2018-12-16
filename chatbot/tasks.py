@@ -74,7 +74,8 @@ def respond(user_id, user_text):
                     if genre_name in fan_genres:
                         pass
                     else:
-                        user.fan_genres.set(fan_genres + genre_name + "@")
+                        user.fan_genres = fan_genres + genre_name + "@"
+                        user.save()
                 else:
                     text = "Sorry, I haven't heard of that genre. What kind of genre is it?"
         ###
