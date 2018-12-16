@@ -110,6 +110,7 @@ DATABASES = {
 }
 
 MUSIC_TO_ARTISTS = 'music_to_artists.dump'
+CLUSTER_MUSIC_TO_AVERAGE_RATING = 'cluster_music_to_average_rating.dump'
 
 
 # Password validation

@@ -7,15 +7,6 @@ from numpy.random import choice
 from chatbot.models import *
 
 
-try:
-    with open(settings.MUSIC_TO_ARTISTS, 'rb') as f:
-        music_to_artists = pickle.load(f)
-    print('music_to_artists loaded')
-except Exception as e:
-    music_to_artists = None
-    print(f'music_to_artists does not exist!! {e}')
-
-
 def recommend(user, opt):
     # Make candidates by option
     candidates = Music.objects.exclude(pk__in=user.recommended.all())
@@ -41,14 +32,20 @@ def recommend(user, opt):
         artist_point = 1
         genre_point = 1
         for i, c in enumerate(default_candidates):
+            try:
+                with open(settings.MUSIC_TO_ARTISTS, 'rb') as f:
+                    music_to_artists = pickle.load(f)
+            except Exception as e:
+                music_to_artists = None
+
             if music_to_artists:
-                for a_id in music_to_artists[c.id]:
-                    if a_id in fan_artists:
-                        ratings[i] += artist_point
+                artist_id_set = music_to_artists[c.id]
             else:
-                for a_id in c.artists.all().values_list('id', flat=True):
-                    if a_id in fan_artists:
-                        ratings[i] += artist_point
+                artist_id_set = c.artists.all().values_list('id', flat=True)
+
+            for a_id in artist_id_set:
+                if a_id in fan_artists:
+                    ratings[i] += artist_point
 
             for g in re.split('[,/]', c.genre):
                 if g.strip() in user.fan_genres:
@@ -73,17 +70,24 @@ def recommend(user, opt):
         # this means clustering has done before user signed up or made evaluations or etc.
         return profit, default_recommend()
 
-    neighbors = Muser.objects.filter(cluster=cluster)
-    for n in neighbors:
-        neighbor_evals = n.evaluations.all()
-        for e in neighbor_evals:
-            if e.music_id in candidate_score:
-                candidate_score[e.music_id].append(e.rating)
+    try:
+        with open(settings.CLUSTER_MUSIC_TO_AVERAGE_RATING, 'rb') as f:
+            cluster_music_to_average_rating = pickle.load(f)
+    except Exception as e:
+        cluster_music_to_average_rating = None
 
-    for mid in candidate_score:
-        if Evaluation.objects.filter(user_id=user.id, music_id=mid).exists():
-            candidate_score[mid] = 0
-        else:
+    if cluster_music_to_average_rating:
+        for mid in candidate_score:
+            candidate_score[mid] = cluster_music_to_average_rating[cluster][mid]
+    else:
+        neighbors = Muser.objects.filter(cluster=cluster)
+        for n in neighbors:
+            neighbor_evals = n.evaluations.all()
+            for e in neighbor_evals:
+                if e.music_id in candidate_score:
+                    candidate_score[e.music_id].append(e.rating)
+
+        for mid in candidate_score:
             candidate_score[mid] = 0 if not candidate_score[mid] else (sum(candidate_score[mid]) / len(candidate_score[mid]))
 
     music = max(candidates, key=lambda c: candidate_score[c.id])

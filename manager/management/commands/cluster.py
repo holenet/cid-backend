@@ -341,9 +341,9 @@ def run_clustering():
     4. For each cluster, move chosen representative points 20% closer to its centroid.
     5. Assign all points to clusters that contains representative closest to the point.
     """
-    num_users = 2000
+    num_users = 500
     num_music = Music.objects.count()
-    num_evals = 100  # average number of eval per dummy
+    num_evals = 50  # average number of eval per dummy
 
     # Construct random users, music and evaluations.
     timer.start('Construct Random Instances')
