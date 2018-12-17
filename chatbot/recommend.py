@@ -24,6 +24,7 @@ def recommend(user, opt):
     default_candidates = candidates[:]
 
     def default_recommend():
+        print('default')
         # Choose one music by original rating
         ratings = [x.original_rating for x in default_candidates]
         total_original_rating = sum(ratings)
@@ -31,13 +32,14 @@ def recommend(user, opt):
         fan_artists = set(user.fan_artists.all().values_list('id', flat=True))
         artist_point = 1
         genre_point = 1
+        try:
+            with open(settings.MUSIC_TO_ARTISTS, 'rb') as f:
+                music_to_artists = pickle.load(f)
+            print('mu su')
+        except Exception as e:
+            music_to_artists = None
+            print('music_to_artists ERROR')
         for i, c in enumerate(default_candidates):
-            try:
-                with open(settings.MUSIC_TO_ARTISTS, 'rb') as f:
-                    music_to_artists = pickle.load(f)
-            except Exception as e:
-                music_to_artists = None
-
             if music_to_artists:
                 artist_id_set = music_to_artists[c.id]
             else:
@@ -75,6 +77,7 @@ def recommend(user, opt):
             cluster_music_to_average_rating = pickle.load(f)
     except Exception as e:
         cluster_music_to_average_rating = None
+        print('cluster.... Error')
 
     if cluster_music_to_average_rating:
         for mid in candidate_score:
